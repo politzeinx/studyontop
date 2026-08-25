@@ -106,7 +106,8 @@ interface AuthContextType {
   loginAsDemo: () => void;
   register: (profile: Partial<UserProfile> & { password?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  updateProfile: (updates: Partial<UserProfile>) => void;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -116,11 +117,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
+  const syncProfileFromServer = async (email: string) => {
+    try {
+      const res = await fetch(`/api/auth/profile?email=${encodeURIComponent(email)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem("studyontop_user", JSON.stringify(data.user));
+        }
+      }
+    } catch (e) {
+      // Falha de rede silenciosa
+    }
+  };
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem("studyontop_user");
       if (stored) {
-        setUser(JSON.parse(stored));
+        const parsed: UserProfile = JSON.parse(stored);
+        setUser(parsed);
+        // Se for uma conta real, busca imediatamente a versão mais recente do servidor (ex: salva no celular)
+        if (!parsed.isDemo && parsed.email) {
+          syncProfileFromServer(parsed.email);
+        }
       } else {
         setUser(null);
       }
@@ -130,6 +151,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }
   }, []);
+
+  const refreshProfile = async () => {
+    if (user?.email && !user.isDemo) {
+      await syncProfileFromServer(user.email);
+    }
+  };
 
   const login = async (email: string, password?: string) => {
     try {
@@ -195,18 +222,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
-  const updateProfile = (updates: Partial<UserProfile>) => {
-    if (!user) return;
-    const updated = { ...user, ...updates };
-    setUser(updated);
-    localStorage.setItem("studyontop_user", JSON.stringify(updated));
+  const updateProfile = async (updates: Partial<UserProfile>) => {
+    if (!user) return { success: false, error: "Usuário não autenticado" };
 
-    // Salva também no servidor
-    fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updated),
-    }).catch(() => {});
+    const payload = {
+      email: user.email,
+      ...updates,
+    };
+
+    // Atualização otimista local
+    const optimistic = { ...user, ...updates };
+    setUser(optimistic);
+    localStorage.setItem("studyontop_user", JSON.stringify(optimistic));
+
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem("studyontop_user", JSON.stringify(data.user));
+          return { success: true };
+        }
+      }
+      return { success: true }; // Otimista manteve
+    } catch (e) {
+      return { success: true };
+    }
   };
 
   return (
@@ -219,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         updateProfile,
+        refreshProfile,
       }}
     >
       {children}
