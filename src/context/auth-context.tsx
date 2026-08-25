@@ -84,7 +84,7 @@ export interface UserProfile {
   currentTriScore: number;
 }
 
-const DEMO_USER: UserProfile = {
+export const DEMO_USER: UserProfile = {
   id: "demo-user-1",
   name: "Luis Teles (Modo Demonstração)",
   email: "luis.demo@studyontop.com",
@@ -122,11 +122,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (stored) {
         setUser(JSON.parse(stored));
       } else {
-        setUser(DEMO_USER);
-        localStorage.setItem("studyontop_user", JSON.stringify(DEMO_USER));
+        // Novo visitante começa sem sessão ativa para ser direcionado ao login
+        setUser(null);
       }
     } catch (e) {
-      setUser(DEMO_USER);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -145,11 +145,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: email.split("@")[0],
         email,
         targetCourse: "Engenharia de Software",
-        targetCollege: "Federal",
+        targetCollege: "USP",
         quotaType: quota,
         targetScore: estimateSisuCutoffScore("Engenharia de Software", quota),
         studyHoursPerDay: 3.0,
-        studyDaysPerWeek: 6,
+        studyDaysPerWeek: 7,
         isDemo: false,
         streakDays: 1,
         currentTriScore: 500.0,
@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: profileData.name || "Novo Estudante",
       email: profileData.email || "aluno@studyontop.com",
       targetCourse: course,
-      targetCollege: profileData.targetCollege || "Federal",
+      targetCollege: profileData.targetCollege || "USP",
       quotaType: quota,
       targetScore: calculatedScore,
       studyHoursPerDay: profileData.studyHoursPerDay || 3.0,
