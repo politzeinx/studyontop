@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, saveUser } from "@/lib/server-storage";
+import { findUserByEmailAsync, saveUserAsync } from "@/lib/server-storage";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const storedUser = findUserByEmail(email);
+    const storedUser = await findUserByEmailAsync(email);
 
     if (!storedUser) {
       return NextResponse.json(
@@ -32,10 +32,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Se o usuário ainda não tinha senha definida (conta pré-existente), registra a senha digitada agora
+    // Se o usuário ainda não tinha senha definida, registra a senha digitada agora
     if (!storedUser.password && password.trim()) {
       storedUser.password = password.trim();
-      saveUser(storedUser);
+      await saveUserAsync(storedUser);
     } else if (storedUser.password && storedUser.password !== password.trim()) {
       return NextResponse.json(
         { error: "Senha incorreta. Verifique a senha digitada e tente novamente." },

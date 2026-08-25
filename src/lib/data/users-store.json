@@ -4,14 +4,14 @@
     "name": "Luis Teles",
     "email": "luisfilocreao@gmail.com",
     "targetCourse": "Engenharia de Software",
-    "targetCollege": "USP",
-    "quotaType": "AMPLA",
-    "targetScore": 765,
+    "targetCollege": "UEPA",
+    "quotaType": "EP_GERAL",
+    "targetScore": 737,
     "studyHoursPerDay": 3,
     "studyDaysPerWeek": 7,
     "isDemo": false,
     "streakDays": 1,
-    "currentTriScore": 500.0,
-    "password": ""
+    "currentTriScore": 500,
+    "password": "luis503091"
   }
 ]

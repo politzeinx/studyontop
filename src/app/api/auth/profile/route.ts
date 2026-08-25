@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, saveUser, StoredUser } from "@/lib/server-storage";
+import { findUserByEmailAsync, saveUserAsync, StoredUser } from "@/lib/server-storage";
 import { estimateSisuCutoffScore, QuotaType } from "@/context/auth-context";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const user = findUserByEmail(email.trim().toLowerCase());
+    const user = await findUserByEmailAsync(email.trim().toLowerCase());
     if (!user) {
       return NextResponse.json(
         { error: "Usuário não encontrado" },
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const existing = findUserByEmail(cleanEmail);
+    const existing = await findUserByEmailAsync(cleanEmail);
 
     const calculatedScore =
       targetScore ||
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       password: existing?.password || "",
     };
 
-    saveUser(updatedUser);
+    await saveUserAsync(updatedUser);
 
     const { password: _, ...userSafe } = updatedUser;
     return NextResponse.json(

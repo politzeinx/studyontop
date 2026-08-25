@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveUser, findUserByEmail, StoredUser } from "@/lib/server-storage";
+import { saveUserAsync, findUserByEmailAsync, StoredUser } from "@/lib/server-storage";
 import { estimateSisuCutoffScore, QuotaType } from "@/context/auth-context";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,20 +21,27 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!email || !email.trim()) {
-      return NextResponse.json({ error: "O e-mail é obrigatório." }, { status: 400 });
+      return NextResponse.json(
+        { error: "O e-mail é obrigatório." },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     if (!password || password.trim().length < 3) {
-      return NextResponse.json({ error: "A senha deve ter pelo menos 3 caracteres." }, { status: 400 });
+      return NextResponse.json(
+        { error: "A senha deve ter pelo menos 3 caracteres." },
+        { status: 400, headers: { "Cache-Control": "no-store" } }
+      );
     }
 
+    const cleanEmail = email.trim().toLowerCase();
     const calculatedScore =
       targetScore || estimateSisuCutoffScore(targetCourse, quotaType as QuotaType);
 
     const newUser: StoredUser = {
       id: `user-${Date.now()}`,
-      name: name?.trim() || email.split("@")[0],
-      email: email.trim().toLowerCase(),
+      name: name?.trim() || cleanEmail.split("@")[0],
+      email: cleanEmail,
       password: password.trim(),
       targetCourse: targetCourse.trim(),
       targetCollege: targetCollege.trim(),
@@ -44,13 +54,17 @@ export async function POST(req: NextRequest) {
       currentTriScore: 500.0,
     };
 
-    saveUser(newUser);
+    await saveUserAsync(newUser);
 
-    // Retorna os dados sem expor o campo de senha
     const { password: _, ...userSafe } = newUser;
-
-    return NextResponse.json({ user: userSafe });
+    return NextResponse.json(
+      { user: userSafe },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Erro no cadastro" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Erro no cadastro" },
+      { status: 500, headers: { "Cache-Control": "no-store" } }
+    );
   }
 }
