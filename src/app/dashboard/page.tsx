@@ -10,57 +10,84 @@ import {
   Layers,
   ArrowUpRight,
   ShieldCheck,
-  AlertCircle,
   ScanLine,
   ChevronRight,
   BarChart3,
-  BookOpen,
   LineChart,
+  FileCheck2,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { TriEvolutionChart } from "@/components/dashboard/tri-evolution-chart";
+import { useAuth } from "@/context/auth-context";
 
 export default function DashboardPage() {
-  const areaPerformance = [
-    { name: "Matemática", score: 792.4, accuracy: 82, trend: "+4.2%", color: "from-blue-500 to-cyan-500", barColor: "bg-blue-500" },
-    { name: "Ciências da Natureza", score: 724.8, accuracy: 71, trend: "+2.8%", color: "from-emerald-500 to-teal-500", barColor: "bg-emerald-500" },
-    { name: "Ciências Humanas", score: 745.2, accuracy: 78, trend: "-1.1%", color: "from-amber-500 to-orange-500", barColor: "bg-amber-500" },
-    { name: "Linguagens e Códigos", score: 688.0, accuracy: 69, trend: "+1.5%", color: "from-purple-500 to-pink-500", barColor: "bg-purple-500" },
-  ];
+  const { user } = useAuth();
+  const isDemo = user?.isDemo ?? true;
 
-  const recentFocusSubjects = [
-    {
-      subject: "Geometria Espacial",
-      subsubject: "Prismas e Cilindros",
-      domain: 35,
-      gainPotential: "MUITO ALTO",
-      recurrence: "Alta (ENEM 2023-2025)",
-      action: "Estudar 60 min",
-    },
-    {
-      subject: "Química Orgânica",
-      subsubject: "Reações e Isomeria",
-      domain: 74,
-      gainPotential: "ALTO",
-      recurrence: "Revisão Contínua",
-      action: "Revisar 12 cards",
-    },
-    {
-      subject: "Ecologia",
-      subsubject: "Ciclos Biogeoquímicos e Impactos",
-      domain: 58,
-      gainPotential: "ALTO",
-      recurrence: "Muito Alta no ENEM Recente",
-      action: "15 Questões",
-    },
-  ];
+  const areaPerformance = isDemo
+    ? [
+        { name: "Matemática", score: 792.4, accuracy: 82, trend: "+4.2%", barColor: "bg-blue-500" },
+        { name: "Ciências da Natureza", score: 724.8, accuracy: 71, trend: "+2.8%", barColor: "bg-emerald-500" },
+        { name: "Ciências Humanas", score: 745.2, accuracy: 78, trend: "-1.1%", barColor: "bg-amber-500" },
+        { name: "Linguagens e Códigos", score: 688.0, accuracy: 69, trend: "+1.5%", barColor: "bg-purple-500" },
+      ]
+    : [
+        { name: "Matemática", score: 500.0, accuracy: 0, trend: "Aguardando 1º Simulado", barColor: "bg-blue-500" },
+        { name: "Ciências da Natureza", score: 500.0, accuracy: 0, trend: "Aguardando 1º Simulado", barColor: "bg-emerald-500" },
+        { name: "Ciências Humanas", score: 500.0, accuracy: 0, trend: "Aguardando 1º Simulado", barColor: "bg-amber-500" },
+        { name: "Linguagens e Códigos", score: 500.0, accuracy: 0, trend: "Aguardando 1º Simulado", barColor: "bg-purple-500" },
+      ];
+
+  const focusSubjects = isDemo
+    ? [
+        {
+          subject: "Geometria Espacial",
+          subsubject: "Prismas e Cilindros",
+          domain: 35,
+          gainPotential: "MUITO ALTO",
+          action: "Estudar 60 min",
+        },
+        {
+          subject: "Química Orgânica",
+          subsubject: "Reações e Isomeria",
+          domain: 74,
+          gainPotential: "ALTO",
+          action: "Revisar 12 cards",
+        },
+        {
+          subject: "Ecologia",
+          subsubject: "Ciclos Biogeoquímicos e Impactos",
+          domain: 58,
+          gainPotential: "ALTO",
+          action: "15 Questões",
+        },
+      ]
+    : [
+        {
+          subject: "Diagnóstico Inicial de Matemática",
+          subsubject: "Funções, Geometria e Aritmética",
+          domain: 0,
+          gainPotential: "MUITO ALTO",
+          action: "Fazer Teste",
+        },
+        {
+          subject: "Diagnóstico de Ciências da Natureza",
+          subsubject: "Física, Química e Biologia",
+          domain: 0,
+          gainPotential: "ALTO",
+          action: "Fazer Teste",
+        },
+      ];
+
+  const plannedWeeklyHours = user ? (user.studyHoursPerDay || 3) * (user.studyDaysPerWeek || 6) : 18;
 
   return (
     <div className="space-y-6">
-      {/* Top Banner: Best Next Action (Recomendação Adaptativa Prioritária) */}
+      {/* Top Banner: Real Account Welcome vs Demo Action */}
       <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 border border-indigo-500/30 shadow-2xl">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -68,24 +95,28 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
               <Badge variant="default" className="text-[11px] uppercase tracking-wider font-bold">
-                Recomendação Adaptativa Prioritária
+                {isDemo ? "Recomendação Adaptativa (Modo Demo)" : `Plano Ativo: ${user?.targetCourse || "ENEM"}`}
               </Badge>
             </div>
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-snug">
-              Estude <span className="gradient-text-primary">Geometria Espacial</span> por 60 minutos
+              {isDemo ? (
+                <>Estude <span className="gradient-text-primary">Geometria Espacial</span> por 60 minutos</>
+              ) : (
+                <>Bem-vindo, <span className="gradient-text-primary">{user?.name}</span>! Vamos começar sua preparação?</>
+              )}
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Detectamos 3 erros recentes em prismas e cilindros. Esse assunto possui{" "}
-              <strong className="text-emerald-400 font-semibold">Potencial de Ganho Muito Alto</strong>{" "}
-              e alta recorrência no padrão do ENEM recente (2023-2025).
+              {isDemo
+                ? "Detectamos 3 erros recentes em prismas e cilindros. Esse assunto possui Potencial de Ganho Muito Alto e alta recorrência no ENEM recente."
+                : `Sua meta é conquistar a aprovação em ${user?.targetCourse || "seu curso"} na ${user?.targetCollege || "sua faculdade dos sonhos"}. Faça seu 1º simulado adaptativo para calibrar sua nota TRI inicial.`}
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <Link href="/plano-estudos">
+            <Link href={isDemo ? "/plano-estudos" : "/simulados/novo"}>
               <Button variant="glow" size="lg" className="w-full sm:w-auto gap-2">
                 <Sparkles className="w-4 h-4" />
-                <span>Começar Agora</span>
+                <span>{isDemo ? "Começar Agora" : "Fazer 1º Simulado"}</span>
               </Button>
             </Link>
             <Link href="/scanner">
@@ -108,18 +139,22 @@ export default function DashboardPage() {
           </div>
           <div className="my-3">
             <div className="text-3xl font-black text-white tracking-tight flex items-baseline gap-2">
-              748,5
-              <span className="text-xs font-bold text-emerald-400 flex items-center">
-                <TrendingUp className="w-3.5 h-3.5 mr-0.5" /> +24 pts
-              </span>
+              {isDemo ? "748,5" : "---"}
+              {isDemo && (
+                <span className="text-xs font-bold text-emerald-400 flex items-center">
+                  <TrendingUp className="w-3.5 h-3.5 mr-0.5" /> +24 pts
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              Estimativa calculada pela plataforma (não é a nota oficial).
+              {isDemo
+                ? "Estimativa calculada pela plataforma (não é a nota oficial)."
+                : "Calibrando... Realize seu 1º simulado para estimar."}
             </p>
           </div>
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-300">
             <span>Meta de Corte:</span>
-            <span className="font-semibold text-indigo-300">810,0</span>
+            <span className="font-semibold text-indigo-300">{user?.targetScore || 800},0</span>
           </div>
         </Card>
 
@@ -131,18 +166,16 @@ export default function DashboardPage() {
           </div>
           <div className="my-3">
             <div className="text-3xl font-black text-emerald-400 tracking-tight">
-              88%
+              {isDemo ? "88%" : "100%"}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              Alta coerência: 92% de acertos nas questões fáceis.
+              {isDemo
+                ? "Alta coerência: 92% de acertos nas questões fáceis."
+                : "Aguardando realização do primeiro teste."}
             </p>
           </div>
           <div className="space-y-1">
-            <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Coerência TRI</span>
-              <span className="text-emerald-400 font-semibold">Excelente</span>
-            </div>
-            <Progress value={88} max={100} indicatorClassName="bg-emerald-500" />
+            <Progress value={isDemo ? 88 : 100} max={100} indicatorClassName="bg-emerald-500" />
           </div>
         </Card>
 
@@ -154,16 +187,18 @@ export default function DashboardPage() {
           </div>
           <div className="my-3">
             <div className="text-3xl font-black text-white tracking-tight flex items-baseline gap-2">
-              18
+              {isDemo ? "18" : "0"}
               <span className="text-xs font-medium text-slate-400">cartões pendentes</span>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              6 Química Orgânica (Revisão Contínua) + 12 Lacunas Recentes.
+              {isDemo
+                ? "6 Química Orgânica + 12 Lacunas Recentes."
+                : "Gerados automaticamente conforme seus erros."}
             </p>
           </div>
-          <Link href="/flashcards/revisar" className="w-full">
+          <Link href={isDemo ? "/flashcards/revisar" : "/flashcards"} className="w-full">
             <Button variant="outline" size="sm" className="w-full text-xs gap-1.5 h-8">
-              <span>Revisar Agora</span>
+              <span>{isDemo ? "Revisar Agora" : "Ver Decks"}</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
           </Link>
@@ -177,14 +212,15 @@ export default function DashboardPage() {
           </div>
           <div className="my-3">
             <div className="text-3xl font-black text-white tracking-tight">
-              14.5<span className="text-base font-normal text-slate-400"> / 18h</span>
+              {isDemo ? "14.5" : "0"}
+              <span className="text-base font-normal text-slate-400"> / {plannedWeeklyHours}h</span>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              80% da meta semanal cumprida. Faltam 3.5h.
+              {isDemo ? "80% da meta cumprida." : `Meta: ${user?.studyHoursPerDay || 3}h/dia (${user?.studyDaysPerWeek || 6} dias).`}
             </p>
           </div>
           <div className="space-y-1">
-            <Progress value={80} max={100} indicatorClassName="bg-amber-500" />
+            <Progress value={isDemo ? 80 : 0} max={100} indicatorClassName="bg-amber-500" />
           </div>
         </Card>
       </div>
@@ -201,12 +237,16 @@ export default function DashboardPage() {
                   Evolução da Nota TRI nos Simulados
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Acompanhamento da proficiência latente em relação à nota de corte do seu curso
+                  {isDemo
+                    ? "Acompanhamento da proficiência latente em relação à nota de corte"
+                    : `Sua curva TRI será traçada aqui a cada simulado rumo à nota de corte (${user?.targetScore || 800} pts)`}
                 </CardDescription>
               </div>
-              <Badge variant="default" className="text-[10px]">
-                +63.5 pts
-              </Badge>
+              {isDemo && (
+                <Badge variant="default" className="text-[10px]">
+                  +63.5 pts
+                </Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-0 pt-2">
@@ -227,7 +267,7 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0 space-y-3">
-              {recentFocusSubjects.map((item, idx) => (
+              {focusSubjects.map((item, idx) => (
                 <div
                   key={idx}
                   className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5 hover:border-indigo-500/30 transition-all"

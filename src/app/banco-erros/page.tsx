@@ -1,23 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   Search,
-  Filter,
   CheckCircle2,
   BookOpen,
   ArrowRight,
   Sparkles,
-  RefreshCw,
   Check,
-  Flame,
+  ScanLine,
+  FileCheck2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getErrorTaxonomyConfig } from "@/lib/utils";
+import { useAuth } from "@/context/auth-context";
 
 export interface ErrorItem {
   id: string;
@@ -36,82 +36,102 @@ export interface ErrorItem {
   date: string;
 }
 
+const DEMO_ERRORS: ErrorItem[] = [
+  {
+    id: "err-1",
+    questionCode: "ENEM 2024 — Q148 (Matemática)",
+    discipline: "Matemática",
+    subject: "Geometria Espacial",
+    subsubject: "Tronco de Pirâmide e Proporcionalidade",
+    difficulty: "DIFICIL",
+    studentAnswer: "C",
+    correctAnswer: "A",
+    taxonomy: "CALCULO",
+    probableCause: "Erro ao simplificar a razão de semelhança k³ para volumes.",
+    whatToStudy: "Fórmula de volume do tronco e propriedades de proporcionalidade espacial (k³ para volumes).",
+    reviewCount: 2,
+    isResolved: false,
+    date: "Ontem",
+  },
+  {
+    id: "err-2",
+    questionCode: "ENEM 2024 — Q112 (Física)",
+    discipline: "Física",
+    subject: "Termodinâmica",
+    subsubject: "Rendimento de Carnot e Escalas Térmicas",
+    difficulty: "DIFICIL",
+    studentAnswer: "B",
+    correctAnswer: "D",
+    taxonomy: "FALTA_CONHECIMENTO",
+    probableCause: "Confusão entre temperatura em Celsius e conversão mandatória para Kelvin.",
+    whatToStudy: "Segunda Lei da Termodinâmica e conversão estrita T(K) = t(°C) + 273.",
+    reviewCount: 3,
+    isResolved: false,
+    date: "22/08/2026",
+  },
+  {
+    id: "err-3",
+    questionCode: "ENEM 2024 — Q095 (Biologia)",
+    discipline: "Biologia",
+    subject: "Ecologia",
+    subsubject: "Ciclos Biogeoquímicos e Eutrofização",
+    difficulty: "FACIL",
+    studentAnswer: "A",
+    correctAnswer: "B",
+    taxonomy: "ATENCAO",
+    probableCause: "Leitura apressada confundiu a consequência final com o primeiro evento desencadeador.",
+    whatToStudy: "Sequência cronológica da Eutrofização em mananciais aquáticos.",
+    reviewCount: 1,
+    isResolved: false,
+    date: "20/08/2026",
+  },
+  {
+    id: "err-4",
+    questionCode: "ENEM 2023 — Q064 (História)",
+    discipline: "História",
+    subject: "História do Brasil",
+    subsubject: "Estado Novo e Cidadania Regulada",
+    difficulty: "MEDIA",
+    studentAnswer: "E",
+    correctAnswer: "B",
+    taxonomy: "INTERPRETACAO",
+    probableCause: "Interpretação da legislação trabalhista dissociada do controle corporativista de sindicatos.",
+    whatToStudy: "Estrutura sindical corporativista da Era Vargas e conceito de Cidadania Regulada.",
+    reviewCount: 4,
+    isResolved: true,
+    date: "14/08/2026",
+  },
+];
+
 export default function BancoErrosPage() {
+  const { user } = useAuth();
   const [selectedTaxonomy, setSelectedTaxonomy] = useState<string>("TODAS");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "RESOLVED">("PENDING");
+  const [errors, setErrors] = useState<ErrorItem[]>([]);
 
-  const [errors, setErrors] = useState<ErrorItem[]>([
-    {
-      id: "err-1",
-      questionCode: "ENEM 2024 — Q148 (Matemática)",
-      discipline: "Matemática",
-      subject: "Geometria Espacial",
-      subsubject: "Tronco de Pirâmide e Proporcionalidade",
-      difficulty: "DIFICIL",
-      studentAnswer: "C",
-      correctAnswer: "A",
-      taxonomy: "CALCULO",
-      probableCause: "Erro ao simplificar a razão de semelhança k³ para volumes.",
-      whatToStudy: "Fórmula de volume do tronco e propriedades de proporcionalidade espacial (k³ para volumes).",
-      reviewCount: 2,
-      isResolved: false,
-      date: "Ontem",
-    },
-    {
-      id: "err-2",
-      questionCode: "ENEM 2024 — Q112 (Física)",
-      discipline: "Física",
-      subject: "Termodinâmica",
-      subsubject: "Rendimento de Carnot e Escalas Térmicas",
-      difficulty: "DIFICIL",
-      studentAnswer: "B",
-      correctAnswer: "D",
-      taxonomy: "FALTA_CONHECIMENTO",
-      probableCause: "Confusão entre temperatura em Celsius e conversão mandatória para Kelvin.",
-      whatToStudy: "Segunda Lei da Termodinâmica e conversão estrita T(K) = t(°C) + 273.",
-      reviewCount: 3,
-      isResolved: false,
-      date: "22/08/2026",
-    },
-    {
-      id: "err-3",
-      questionCode: "ENEM 2024 — Q095 (Biologia)",
-      discipline: "Biologia",
-      subject: "Ecologia",
-      subsubject: "Ciclos Biogeoquímicos e Eutrofização",
-      difficulty: "FACIL",
-      studentAnswer: "A",
-      correctAnswer: "B",
-      taxonomy: "ATENCAO",
-      probableCause: "Leitura apressada confundiu a consequência final (morte dos peixes) com o primeiro evento desencadeador (floração).",
-      whatToStudy: "Sequência cronológica da Eutrofização em mananciais aquáticos.",
-      reviewCount: 1,
-      isResolved: false,
-      date: "20/08/2026",
-    },
-    {
-      id: "err-4",
-      questionCode: "ENEM 2023 — Q064 (História)",
-      discipline: "História",
-      subject: "História do Brasil",
-      subsubject: "Estado Novo e Cidadania Regulada",
-      difficulty: "MEDIA",
-      studentAnswer: "E",
-      correctAnswer: "B",
-      taxonomy: "INTERPRETACAO",
-      probableCause: "Interpretação da legislação trabalhista dissociada do controle corporativista de sindicatos.",
-      whatToStudy: "Estrutura sindical corporativista da Era Vargas e conceito de Cidadania Regulada.",
-      reviewCount: 4,
-      isResolved: true,
-      date: "14/08/2026",
-    },
-  ]);
+  useEffect(() => {
+    if (user?.isDemo) {
+      setErrors(DEMO_ERRORS);
+    } else if (user) {
+      // Carrega erros reais da conta do usuário
+      const stored = localStorage.getItem(`studyontop_errors_${user.id}`);
+      if (stored) {
+        setErrors(JSON.parse(stored));
+      } else {
+        setErrors([]);
+      }
+    }
+  }, [user]);
 
   const toggleResolved = (id: string) => {
-    setErrors(
-      errors.map((e) => (e.id === id ? { ...e, isResolved: !e.isResolved } : e))
+    const updated = errors.map((e) =>
+      e.id === id ? { ...e, isResolved: !e.isResolved } : e
     );
+    setErrors(updated);
+    if (user && !user.isDemo) {
+      localStorage.setItem(`studyontop_errors_${user.id}`, JSON.stringify(updated));
+    }
   };
 
   const taxonomyTypes = [
@@ -141,6 +161,57 @@ export default function BancoErrosPage() {
 
   const pendingCount = errors.filter((e) => !e.isResolved).length;
 
+  // Estado Vazio para Conta Real Nova (Sem erros ainda)
+  if (!user?.isDemo && errors.length === 0) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+              <AlertTriangle className="w-6 h-6 text-rose-400" />
+              Banco de Erros Inteligente
+            </h1>
+            <p className="text-sm text-slate-400">
+              Diagnóstico de causa raiz de cada questão errada e orientações de estudo
+            </p>
+          </div>
+          <Badge variant="default" className="text-xs">
+            Conta Real: {user?.name}
+          </Badge>
+        </div>
+
+        {/* Empty State Banner */}
+        <Card className="p-8 sm:p-12 text-center space-y-5 border-slate-800 bg-slate-900/60 shadow-xl">
+          <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2 max-w-md mx-auto">
+            <h2 className="text-xl font-bold text-white">Nenhum erro registrado ainda!</h2>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Sua conta real está pronta e limpa. Conforme você realizar simulados ou escanear gabaritos, as questões que você errar serão classificadas aqui automaticamente com o motivo provável e o plano de revisão.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Link href="/simulados/novo">
+              <Button variant="glow" size="lg" className="w-full sm:w-auto text-xs sm:text-sm gap-2">
+                <FileCheck2 className="w-4 h-4" />
+                <span>Fazer Primeiro Simulado</span>
+              </Button>
+            </Link>
+            <Link href="/scanner">
+              <Button variant="outline" size="lg" className="w-full sm:w-auto text-xs sm:text-sm gap-2">
+                <ScanLine className="w-4 h-4 text-indigo-400" />
+                <span>Escanear Folha de Prova</span>
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -156,6 +227,11 @@ export default function BancoErrosPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {user?.isDemo && (
+            <Badge variant="cyan" className="text-[10px]">
+              Modo Demonstração
+            </Badge>
+          )}
           <Badge variant="destructive" className="text-xs">
             {pendingCount} Erros em Análise
           </Badge>
