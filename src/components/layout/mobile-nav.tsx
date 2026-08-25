@@ -78,6 +78,16 @@ export function MobileNav() {
     },
   ];
 
+  const checkIsActive = (href: string) => {
+    if (href === "/simulados") {
+      return pathname === "/simulados" || pathname === "/simulados/novo" || (pathname.startsWith("/simulados/") && !pathname.startsWith("/simulados/enviar"));
+    }
+    if (href === "/simulados/enviar") return pathname === "/simulados/enviar";
+    if (href === "/scanner") return pathname === "/scanner";
+    if (href === "/dashboard") return pathname === "/dashboard";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
+
   return (
     <>
       {/* Mobile Drawer (Menu Completo Lateral no Celular) */}
@@ -132,9 +142,7 @@ export function MobileNav() {
                     <div className="space-y-0.5">
                       {group.items.map((item) => {
                         const Icon = item.icon;
-                        const isActive =
-                          pathname === item.href ||
-                          (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                        const isActive = checkIsActive(item.href);
 
                         return (
                           <Link
@@ -251,9 +259,7 @@ export function MobileNav() {
       <div className="lg:hidden fixed bottom-0 inset-x-0 h-16 bg-[#0B0F19]/95 backdrop-blur-xl border-t border-slate-800/90 z-30 px-2 flex items-center justify-around pb-safe">
         {mainBottomTabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive =
-            pathname === tab.href ||
-            (tab.href !== "/dashboard" && pathname.startsWith(tab.href));
+          const isActive = checkIsActive(tab.href);
 
           if (tab.isCentral) {
             return (

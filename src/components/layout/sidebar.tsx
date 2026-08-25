@@ -29,7 +29,6 @@ export interface NavItem {
   icon: LucideIcon;
   badge?: string;
   badgeColor?: "rose" | "indigo";
-  isHighlight?: boolean;
 }
 
 export interface NavGroup {
@@ -75,7 +74,6 @@ export function Sidebar() {
           title: "Scanner Provas",
           href: "/scanner",
           icon: ScanLine,
-          isHighlight: true,
         },
         {
           title: "Enviar Simulado",
@@ -184,9 +182,20 @@ export function Sidebar() {
             <div className="space-y-1 mt-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                
+                // Lógica estrita para evitar conflito de abas simultaneamente ativas
+                let isActive = false;
+                if (item.href === "/simulados") {
+                  isActive = pathname === "/simulados" || pathname === "/simulados/novo" || (pathname.startsWith("/simulados/") && !pathname.startsWith("/simulados/enviar"));
+                } else if (item.href === "/simulados/enviar") {
+                  isActive = pathname === "/simulados/enviar";
+                } else if (item.href === "/scanner") {
+                  isActive = pathname === "/scanner";
+                } else if (item.href === "/dashboard") {
+                  isActive = pathname === "/dashboard";
+                } else {
+                  isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                }
 
                 return (
                   <Link
@@ -195,11 +204,8 @@ export function Sidebar() {
                     className={cn(
                       "flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
                       isActive
-                        ? "bg-indigo-600/20 text-white border border-indigo-500/30 shadow-sm"
-                        : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60",
-                      item.isHighlight &&
-                        !isActive &&
-                        "border border-indigo-500/30 bg-indigo-950/30 text-indigo-300 hover:bg-indigo-900/40"
+                        ? "bg-indigo-600/30 text-white border border-indigo-500/40 shadow-sm"
+                        : "text-slate-400 hover:text-slate-100 hover:bg-slate-800/60"
                     )}
                   >
                     <div className="flex items-center gap-3">
@@ -207,9 +213,7 @@ export function Sidebar() {
                         className={cn(
                           "w-4 h-4 transition-colors",
                           isActive
-                            ? "text-indigo-400"
-                            : item.isHighlight
-                            ? "text-indigo-400"
+                            ? "text-indigo-400 font-bold"
                             : "text-slate-400 group-hover:text-slate-200"
                         )}
                       />
