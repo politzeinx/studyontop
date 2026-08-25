@@ -18,7 +18,6 @@ import {
   Flame,
   GraduationCap,
   LogOut,
-  UserCheck,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,92 +37,10 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export const navigationLinks: NavGroup[] = [
-  {
-    category: "Principal",
-    items: [
-      {
-        title: "Dashboard",
-        href: "/dashboard",
-        icon: LayoutDashboard,
-      },
-      {
-        title: "Plano de Estudos",
-        href: "/plano-estudos",
-        icon: CalendarDays,
-        badge: "Hoje",
-      },
-      {
-        title: "Simulados",
-        href: "/simulados",
-        icon: FileCheck2,
-      },
-      {
-        title: "Scanner Provas",
-        href: "/scanner",
-        icon: ScanLine,
-        isHighlight: true,
-      },
-      {
-        title: "Enviar Simulado",
-        href: "/simulados/enviar",
-        icon: UploadCloud,
-      },
-    ],
-  },
-  {
-    category: "Aprendizado & Revisão",
-    items: [
-      {
-        title: "Flashcards",
-        href: "/flashcards",
-        icon: Layers,
-        badge: "18",
-      },
-      {
-        title: "Revisões (SRS)",
-        href: "/revisoes",
-        icon: History,
-      },
-      {
-        title: "Banco de Erros",
-        href: "/banco-erros",
-        icon: AlertTriangle,
-        badgeColor: "rose",
-      },
-      {
-        title: "Mapa de Assuntos",
-        href: "/assuntos",
-        icon: BookOpen,
-      },
-    ],
-  },
-  {
-    category: "Inteligência & Estatísticas",
-    items: [
-      {
-        title: "Desempenho & TRI",
-        href: "/desempenho",
-        icon: LineChart,
-      },
-      {
-        title: "ENEM Recente (2023+)",
-        href: "/enem-recente",
-        icon: Sparkles,
-        badge: "Novo",
-      },
-      {
-        title: "Configurações",
-        href: "/configuracoes",
-        icon: Settings,
-      },
-    ],
-  },
-];
-
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout, loginAsDemo } = useAuth();
+  const isDemo = user?.isDemo ?? true;
 
   const userInitials = user?.name
     ? user.name
@@ -133,6 +50,90 @@ export function Sidebar() {
         .join("")
         .toUpperCase()
     : "SO";
+
+  const navigationGroups: NavGroup[] = [
+    {
+      category: "Principal",
+      items: [
+        {
+          title: "Dashboard",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+        },
+        {
+          title: "Plano de Estudos",
+          href: "/plano-estudos",
+          icon: CalendarDays,
+          badge: isDemo ? "Hoje" : undefined,
+        },
+        {
+          title: "Simulados",
+          href: "/simulados",
+          icon: FileCheck2,
+        },
+        {
+          title: "Scanner Provas",
+          href: "/scanner",
+          icon: ScanLine,
+          isHighlight: true,
+        },
+        {
+          title: "Enviar Simulado",
+          href: "/simulados/enviar",
+          icon: UploadCloud,
+        },
+      ],
+    },
+    {
+      category: "Aprendizado & Revisão",
+      items: [
+        {
+          title: "Flashcards",
+          href: "/flashcards",
+          icon: Layers,
+          badge: isDemo ? "18" : undefined,
+        },
+        {
+          title: "Revisões (SRS)",
+          href: "/revisoes",
+          icon: History,
+        },
+        {
+          title: "Banco de Erros",
+          href: "/banco-erros",
+          icon: AlertTriangle,
+          badge: isDemo ? "3" : undefined,
+          badgeColor: "rose",
+        },
+        {
+          title: "Mapa de Assuntos",
+          href: "/assuntos",
+          icon: BookOpen,
+        },
+      ],
+    },
+    {
+      category: "Inteligência & Estatísticas",
+      items: [
+        {
+          title: "Desempenho & TRI",
+          href: "/desempenho",
+          icon: LineChart,
+        },
+        {
+          title: "ENEM Recente (2023+)",
+          href: "/enem-recente",
+          icon: Sparkles,
+          badge: "Novo",
+        },
+        {
+          title: "Configurações",
+          href: "/configuracoes",
+          icon: Settings,
+        },
+      ],
+    },
+  ];
 
   return (
     <aside className="hidden lg:flex w-72 flex-col fixed inset-y-0 left-0 z-40 bg-[#0B0F19]/95 backdrop-blur-xl border-r border-slate-800/80 transition-all duration-300">
@@ -163,19 +164,19 @@ export function Sidebar() {
             <div>
               <span className="text-xs font-semibold text-white block">Ofensiva de Estudos</span>
               <span className="text-[11px] text-amber-400 font-bold">
-                {user?.streakDays || 1} Dias Seguidos
+                {isDemo ? 14 : (user?.streakDays || 1)} Dias Seguidos
               </span>
             </div>
           </div>
           <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-medium">
-            TRI {user?.currentTriScore?.toFixed(0) || "500"}
+            {isDemo ? "TRI 748" : "TRI ---"}
           </span>
         </div>
       </div>
 
       {/* Navigation Groups */}
       <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-6 custom-scrollbar">
-        {navigationLinks.map((group) => (
+        {navigationGroups.map((group) => (
           <div key={group.category} className="space-y-1">
             <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
               {group.category}

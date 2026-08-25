@@ -3,8 +3,16 @@
 import { Bell, Sparkles, Target, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { useAuth } from "@/context/auth-context";
 
 export function Header() {
+  const { user } = useAuth();
+  const isDemo = user?.isDemo ?? true;
+
+  const targetCourse = isDemo ? "Medicina" : (user?.targetCourse || "Engenharia de Software");
+  const targetCollege = user?.targetCollege ? ` (${user.targetCollege})` : "";
+  const targetScore = isDemo ? 810 : (user?.targetScore || 750);
+
   return (
     <header className="hidden lg:flex h-18 items-center justify-between px-8 border-b border-slate-800/80 bg-[#0B0F19]/60 backdrop-blur-md sticky top-0 z-30">
       {/* Target and Status Pills */}
@@ -12,7 +20,7 @@ export function Header() {
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
           <Target className="w-4 h-4 text-indigo-400" />
           <span className="font-semibold text-white">Objetivo:</span>
-          <span>Medicina — Nota de Corte ~810</span>
+          <span>{targetCourse}{targetCollege} — Nota de Corte ~{targetScore}</span>
         </div>
 
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">

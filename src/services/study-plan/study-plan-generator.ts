@@ -4,8 +4,8 @@ import { SubjectDomainInput, calculatePriorityIndex } from "@/lib/recommendation
 
 export interface UserStudyConfig {
   studyHoursPerDay: number; // Ex: 3.0
-  studyDaysPerWeek: number; // Ex: 6
-  targetCourse: string; // Ex: Medicina
+  studyDaysPerWeek: number; // Ex: 5, 6 ou 7
+  targetCourse: string; // Ex: Engenharia de Software
   examDate?: Date; // Data do ENEM
 }
 
@@ -30,14 +30,15 @@ export interface GeneratedStudyPlanResult {
 }
 
 /**
- * Gera o cronograma diário e semanal adaptativo do aluno
+ * Gera o cronograma diário e semanal adaptativo do aluno para 5, 6 ou 7 dias
  */
 export function generateAdaptiveStudyPlan(
   config: UserStudyConfig,
   domainInputs: SubjectDomainInput[]
 ): GeneratedStudyPlanResult {
   const { studyHoursPerDay = 3.0, studyDaysPerWeek = 6 } = config;
-  const weeklyTargetHours = studyHoursPerDay * studyDaysPerWeek;
+  const clampedDays = Math.min(Math.max(studyDaysPerWeek, 1), 7);
+  const weeklyTargetHours = studyHoursPerDay * clampedDays;
   const dailyTargetMinutes = Math.round(studyHoursPerDay * 60);
 
   // Calcula prioridades de todos os assuntos cadastrados
@@ -57,25 +58,39 @@ export function generateAdaptiveStudyPlan(
     rationale: "Assunto prioritário devido a baixo domínio e alta recorrência recente no ENEM.",
   };
 
-  const daysOfWeek: Array<DailySchedule["dayOfWeek"]> = [
+  const allDaysOfWeek: Array<DailySchedule["dayOfWeek"]> = [
     "SEGUNDA",
     "TERCA",
     "QUARTA",
     "QUINTA",
     "SEXTA",
     "SABADO",
+    "DOMINGO",
   ];
 
   const dailySchedules: DailySchedule[] = [];
-  let dayIdx = 0;
 
-  for (const day of daysOfWeek.slice(0, studyDaysPerWeek)) {
+  for (let idx = 0; idx < 7; idx++) {
+    const dayName = allDaysOfWeek[idx];
+    const isStudyDay = idx < clampedDays;
+
+    if (!isStudyDay) {
+      // Dia de descanso programado
+      dailySchedules.push({
+        dayOfWeek: dayName,
+        date: "Descanso",
+        totalPlannedHours: 0,
+        blocks: [],
+      });
+      continue;
+    }
+
     const blocks: StudyBlock[] = [];
     let remainingMinutes = dailyTargetMinutes;
 
-    // 1. Bloco de Revisão Diária Obrigatória de Flashcards SRS (20 min)
+    // 1. Bloco de Revisão Diária de Flashcards (SRS)
     blocks.push({
-      id: `block-${day}-srs`,
+      id: `block-${dayName}-srs`,
       subject: "Revisão Diária de Flashcards (SRS)",
       area: KnowledgeArea.NATUREZA,
       durationMinutes: 20,
@@ -86,26 +101,31 @@ export function generateAdaptiveStudyPlan(
     });
     remainingMinutes -= 20;
 
-    // 2. Se for Sábado: Simulado Semanal ou Foco em Questões
-    if (day === "SABADO") {
+    // 2. Se for Sábado ou Domingo: Simulado ou Treino de Questões
+    if (dayName === "SABADO" || (dayName === "DOMINGO" && clampedDays === 7)) {
+      const isSimDay = dayName === "SABADO";
       blocks.push({
-        id: `block-${day}-sim`,
-        subject: "Simulado Adaptativo / Treino de Ritmo",
+        id: `block-${dayName}-${isSimDay ? "sim" : "quest"}`,
+        subject: isSimDay
+          ? "Simulado Adaptativo / Treino de Ritmo"
+          : "Treino Prático de Questões Recentes",
         area: topSubject.area,
         durationMinutes: remainingMinutes,
-        type: "SIMULADO",
+        type: isSimDay ? "SIMULADO" : "QUESTOES",
         priority: PriorityLevel.MUITO_ALTA,
-        reason: "Treino de estratégia de tempo e calibração da TRI.",
+        reason: isSimDay
+          ? "Treino de estratégia de tempo e calibração da TRI."
+          : "Fixação e consolidação de questões contemporâneas.",
         completed: false,
       });
       remainingMinutes = 0;
     } else {
-      // 3. Bloco Principal de Teoria & Exercícios do Assunto Prioritário do Dia
-      const targetSub = prioritizedSubjects[dayIdx % prioritizedSubjects.length] || topSubject;
+      // 3. Bloco Principal de Teoria & Exercícios
+      const targetSub = prioritizedSubjects[idx % prioritizedSubjects.length] || topSubject;
       const mainDuration = Math.min(60, remainingMinutes);
 
       blocks.push({
-        id: `block-${day}-main`,
+        id: `block-${dayName}-main`,
         subject: `${targetSub.subject}${targetSub.subsubject ? ` (${targetSub.subsubject})` : ""}`,
         area: targetSub.area,
         durationMinutes: mainDuration,
@@ -119,10 +139,10 @@ export function generateAdaptiveStudyPlan(
       // 4. Bloco Secundário de Resolução de Questões Calibradas
       if (remainingMinutes > 0) {
         const secondarySub =
-          prioritizedSubjects[(dayIdx + 1) % prioritizedSubjects.length] || topSubject;
+          prioritizedSubjects[(idx + 1) % prioritizedSubjects.length] || topSubject;
 
         blocks.push({
-          id: `block-${day}-sec`,
+          id: `block-${dayName}-sec`,
           subject: `${secondarySub.subject} (Questões Calibradas)`,
           area: secondarySub.area,
           durationMinutes: remainingMinutes,
@@ -136,22 +156,10 @@ export function generateAdaptiveStudyPlan(
     }
 
     dailySchedules.push({
-      dayOfWeek: day,
-      date: `Dia ${dayIdx + 1}`,
+      dayOfWeek: dayName,
+      date: `Dia ${idx + 1}`,
       totalPlannedHours: Math.round((dailyTargetMinutes / 60) * 10) / 10,
       blocks,
-    });
-
-    dayIdx++;
-  }
-
-  // Se descansar no Domingo
-  if (studyDaysPerWeek < 7) {
-    dailySchedules.push({
-      dayOfWeek: "DOMINGO",
-      date: "Descanso",
-      totalPlannedHours: 0,
-      blocks: [],
     });
   }
 

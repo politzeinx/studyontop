@@ -171,7 +171,7 @@ export default function PlanoEstudosPage() {
       <div className="grid grid-cols-7 gap-2">
         {plan.dailySchedules.map((schedule, idx) => {
           const isSelected = selectedDayIdx === idx;
-          const isRest = schedule.dayOfWeek === "DOMINGO";
+          const isRest = schedule.totalPlannedHours === 0;
 
           return (
             <div
