@@ -21,8 +21,8 @@ import {
   ArrowLeft,
   FileBadge,
   Sliders,
-  Plus,
-  Trash2,
+  Calendar,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -31,13 +31,14 @@ import { ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
 import { useAuth } from "@/context/auth-context";
 import { getEnemQuestionMetadata, EnemQuestionMeta } from "@/lib/data/enem-official-matrix";
 
-type SelectionMode = "PRESET" | "CUSTOM_RANGE" | "SPECIFIC_COUNT";
+type EnemDayType = "DIA_1" | "DIA_2" | "CUSTOM";
 type WizardStep = "STUDENT_ANSWERS" | "OFFICIAL_KEY" | "RESULT";
 
 export default function EnviarSimuladoPage() {
   const { user, updateProfile } = useAuth();
 
-  // Configuração da Seleção de Questões
+  // Seleção do Dia do ENEM
+  const [selectedDay, setSelectedDay] = useState<EnemDayType>("DIA_1");
   const [startQuestion, setStartQuestion] = useState<number>(1);
   const [endQuestion, setEndQuestion] = useState<number>(15);
   const [currentStep, setCurrentStep] = useState<WizardStep>("STUDENT_ANSWERS");
@@ -64,6 +65,7 @@ export default function EnviarSimuladoPage() {
     wrongCount: number;
     scorePct: number;
     estimatedTri: number;
+    dayTitle: string;
     rangeLabel: string;
     wrongItems: Array<{
       questionNumber: number;
@@ -75,7 +77,24 @@ export default function EnviarSimuladoPage() {
     }>;
   } | null>(null);
 
-  // Define os presets rápidos
+  // Troca de Dia do ENEM e ajusta os limites de questões automaticamente
+  const handleSelectDay = (day: EnemDayType) => {
+    setSelectedDay(day);
+    setStudentAnswers(null);
+    setOfficialAnswers(null);
+
+    if (day === "DIA_1") {
+      setStartQuestion(1);
+      setEndQuestion(15);
+    } else if (day === "DIA_2") {
+      setStartQuestion(91);
+      setEndQuestion(105);
+    } else {
+      setStartQuestion(1);
+      setEndQuestion(20);
+    }
+  };
+
   const handleApplyPreset = (start: number, end: number) => {
     setStartQuestion(start);
     setEndQuestion(end);
@@ -311,6 +330,13 @@ export default function EnviarSimuladoPage() {
       streakDays: (user?.streakDays || 0) + 1,
     });
 
+    const dayTitle =
+      selectedDay === "DIA_1"
+        ? "1º Dia (Linguagens e Humanas)"
+        : selectedDay === "DIA_2"
+        ? "2º Dia (Natureza e Matemática)"
+        : "Simulado Personalizado";
+
     const rangeLabel = `Questões ${startQuestion.toString().padStart(2, "0")} a ${endQuestion.toString().padStart(2, "0")}`;
 
     setCorrectionSummary({
@@ -319,6 +345,7 @@ export default function EnviarSimuladoPage() {
       wrongCount: wrong,
       scorePct,
       estimatedTri: calculatedTri,
+      dayTitle,
       rangeLabel,
       wrongItems: wrongList,
     });
@@ -333,10 +360,10 @@ export default function EnviarSimuladoPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
           <UploadCloud className="w-6 h-6 text-indigo-400" />
-          Envio de Gabarito & Correção Personalizada
+          Envio de Gabarito & Correção
         </h1>
         <p className="text-sm text-slate-400">
-          Escolha exatamente quantas questões deseja corrigir (de 5 a 90 questões), envie suas respostas e cruze com o gabarito oficial.
+          Escolha o Dia do ENEM que deseja corrigir, a quantidade de questões e envie suas respostas para diagnóstico TRI.
         </p>
       </div>
 
@@ -407,105 +434,255 @@ export default function EnviarSimuladoPage() {
       </div>
 
       {/* =========================================================================
-          ETAPA 1: SELEÇÃO DO INTERVALO E RESPOSTAS MARCADAS PELO ALUNO
+          ETAPA 1: ESCOLHA DO DIA DO ENEM E RESPOSTAS MARCADAS
           ========================================================================= */}
       {currentStep === "STUDENT_ANSWERS" && (
         <Card className="p-6 space-y-6">
-          {/* Seletor Dinâmico de Quantidade / Intervalo de Questões */}
+          {/* 1. SELETOR PRINCIPAL: QUAL DIA DO ENEM QUER CORRIGIR? */}
           <div className="space-y-3">
+            <label className="text-xs font-bold text-slate-300 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-indigo-400" />
+              <span>1. Escolha qual Dia da Prova você quer corrigir:</span>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Opção 1º Dia */}
+              <button
+                type="button"
+                onClick={() => handleSelectDay("DIA_1")}
+                className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
+                  selectedDay === "DIA_1"
+                    ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
+                    : "bg-slate-900 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <Badge variant={selectedDay === "DIA_1" ? "default" : "secondary"} className="text-[10px]">
+                    Questões 01 a 90
+                  </Badge>
+                  {selectedDay === "DIA_1" && <CheckCircle2 className="w-4 h-4 text-indigo-400" />}
+                </div>
+                <h4 className="font-bold text-sm text-white">1º DIA DO ENEM</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Linguagens e Códigos (Q01-Q45) & Ciências Humanas (Q46-Q90)
+                </p>
+              </button>
+
+              {/* Opção 2º Dia */}
+              <button
+                type="button"
+                onClick={() => handleSelectDay("DIA_2")}
+                className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
+                  selectedDay === "DIA_2"
+                    ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
+                    : "bg-slate-900 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <Badge variant={selectedDay === "DIA_2" ? "default" : "secondary"} className="text-[10px]">
+                    Questões 91 a 180
+                  </Badge>
+                  {selectedDay === "DIA_2" && <CheckCircle2 className="w-4 h-4 text-indigo-400" />}
+                </div>
+                <h4 className="font-bold text-sm text-white">2º DIA DO ENEM</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Ciências da Natureza (Q91-Q135) & Matemática (Q136-Q180)
+                </p>
+              </button>
+
+              {/* Opção Personalizado */}
+              <button
+                type="button"
+                onClick={() => handleSelectDay("CUSTOM")}
+                className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
+                  selectedDay === "CUSTOM"
+                    ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
+                    : "bg-slate-900 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <Badge variant={selectedDay === "CUSTOM" ? "default" : "secondary"} className="text-[10px]">
+                    Livre
+                  </Badge>
+                  {selectedDay === "CUSTOM" && <CheckCircle2 className="w-4 h-4 text-indigo-400" />}
+                </div>
+                <h4 className="font-bold text-sm text-white">SIMULADO LIVRE</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Escolha qualquer bloco livre de questões para correção rápida.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. PRESETS E SELETOR DE INTERVALO BASEADO NO DIA ESCOLHIDO */}
+          <div className="space-y-3 pt-3 border-t border-slate-800">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-300 block">
-                1. Quais questões você resolveu e deseja corrigir?
+                2. Quantas questões do {selectedDay === "DIA_1" ? "1º Dia" : selectedDay === "DIA_2" ? "2º Dia" : "Simulado"} você quer corrigir?
               </label>
               <Badge variant="cyan" className="text-xs font-bold">
-                {totalQuestionsCount} Questões Selecionadas (Q{startQuestion.toString().padStart(2, "0")} até Q{endQuestion.toString().padStart(2, "0")})
+                {totalQuestionsCount} Questões (Q{startQuestion.toString().padStart(2, "0")} até Q{endQuestion.toString().padStart(2, "0")})
               </Badge>
             </div>
 
-            {/* Presets Rápidos */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleApplyPreset(1, 10)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  startQuestion === 1 && endQuestion === 10
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                10 Questões (01 a 10)
-              </button>
+            {/* Presets para 1º Dia */}
+            {selectedDay === "DIA_1" && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 10)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 1 && endQuestion === 10
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  10 Questões (01 a 10)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 15)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 1 && endQuestion === 15
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  15 Questões (01 a 15)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 45)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 1 && endQuestion === 45
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Linguagens Completo (01 a 45)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(46, 90)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 46 && endQuestion === 90
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Humanas Completo (46 a 90)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 90)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 1 && endQuestion === 90
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  1º Dia Completo (01 a 90)
+                </button>
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={() => handleApplyPreset(1, 15)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  startQuestion === 1 && endQuestion === 15
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                15 Questões (01 a 15)
-              </button>
+            {/* Presets para 2º Dia */}
+            {selectedDay === "DIA_2" && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(91, 100)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 91 && endQuestion === 100
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  10 Questões de Natureza (91 a 100)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(136, 145)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 136 && endQuestion === 145
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  10 Questões de Matemática (136 a 145)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(91, 135)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 91 && endQuestion === 135
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Natureza Completo (91 a 135)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(136, 180)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 136 && endQuestion === 180
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Matemática Completo (136 a 180)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(91, 180)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 91 && endQuestion === 180
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  2º Dia Completo (91 a 180)
+                </button>
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={() => handleApplyPreset(1, 20)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  startQuestion === 1 && endQuestion === 20
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                20 Questões (01 a 20)
-              </button>
+            {/* Presets para Simulado Livre */}
+            {selectedDay === "CUSTOM" && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 10)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 border border-slate-800 text-slate-300"
+                >
+                  10 Questões
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 20)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 border border-slate-800 text-slate-300"
+                >
+                  20 Questões
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 45)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 border border-slate-800 text-slate-300"
+                >
+                  45 Questões
+                </button>
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={() => handleApplyPreset(1, 45)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  startQuestion === 1 && endQuestion === 45
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                1 Área (01 a 45)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleApplyPreset(46, 90)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  startQuestion === 46 && endQuestion === 90
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                Humanas (46 a 90)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleApplyPreset(1, 90)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                  startQuestion === 1 && endQuestion === 90
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                1º Dia Completo (01 a 90)
-              </button>
-            </div>
-
-            {/* Ajuste Fino Manual do Intervalo */}
+            {/* Ajuste Manual do Intervalo */}
             <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row items-center gap-4 text-xs">
-              <span className="text-slate-400 font-semibold">Ou personalize o intervalo exato:</span>
+              <span className="text-slate-400 font-semibold">Ou digite o intervalo exato:</span>
               <div className="flex items-center gap-2">
                 <span>Da Questão:</span>
                 <input
                   type="number"
-                  min={1}
-                  max={179}
+                  min={selectedDay === "DIA_2" ? 91 : 1}
+                  max={selectedDay === "DIA_1" ? 89 : 179}
                   value={startQuestion}
                   onChange={(e) => {
                     const val = Math.max(1, parseInt(e.target.value) || 1);
@@ -522,7 +699,7 @@ export default function EnviarSimuladoPage() {
                 <input
                   type="number"
                   min={startQuestion}
-                  max={180}
+                  max={selectedDay === "DIA_1" ? 90 : 180}
                   value={endQuestion}
                   onChange={(e) => {
                     const val = Math.min(180, parseInt(e.target.value) || startQuestion);
@@ -538,7 +715,7 @@ export default function EnviarSimuladoPage() {
           {!studentAnswers ? (
             <div className="space-y-4 pt-2 border-t border-slate-800">
               <label className="text-xs font-bold text-slate-300 block">
-                2. Como deseja inserir suas {totalQuestionsCount} respostas?
+                3. Como deseja inserir suas {totalQuestionsCount} respostas?
               </label>
 
               {/* Botões de Ação Imediata */}
@@ -574,7 +751,7 @@ export default function EnviarSimuladoPage() {
                 </Button>
               </div>
 
-              {/* Upload de PDF opcional */}
+              {/* Upload de PDF */}
               {studentInputMode === "PDF" && (
                 <div className="p-6 border-dashed border-2 border-indigo-500/30 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 bg-slate-950/40">
                   <h4 className="text-xs font-bold text-white">
@@ -603,7 +780,7 @@ export default function EnviarSimuladoPage() {
                 </div>
               )}
 
-              {/* Colar Texto opcional */}
+              {/* Colar Texto */}
               {studentInputMode === "TEXT" && (
                 <div className="space-y-3">
                   <textarea
@@ -626,7 +803,7 @@ export default function EnviarSimuladoPage() {
               )}
             </div>
           ) : (
-            /* Grade Dinâmica das Questões Selecionadas */
+            /* Grade Dinâmica das Questões */
             <div className="space-y-6 animate-in fade-in-50">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
                 <div>
@@ -634,7 +811,9 @@ export default function EnviarSimuladoPage() {
                     <Badge variant="success" className="text-xs font-bold">
                       {studentAnswers.length} Questões (Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")})
                     </Badge>
-                    <span className="text-xs text-slate-400">Suas Respostas Marcadas</span>
+                    <span className="text-xs text-slate-400">
+                      Caderno: {selectedDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}
+                    </span>
                   </div>
                   <h3 className="text-lg font-bold text-white mt-1">
                     Confira ou ajuste suas alternativas
@@ -651,7 +830,7 @@ export default function EnviarSimuladoPage() {
                   className="text-xs gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Alterar Quantidade</span>
+                  <span>Alterar Quantidade / Dia</span>
                 </Button>
               </div>
 
@@ -748,7 +927,7 @@ export default function EnviarSimuladoPage() {
                 setOfficialKeyMode("DEFAULT_ENEM");
                 setOfficialAnswers(null);
               }}
-              className={`p-4 rounded-2xl text-left border transition-all ${
+              className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
                 officialKeyMode === "DEFAULT_ENEM"
                   ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
                   : "bg-slate-900 border-slate-800 hover:border-slate-700"
@@ -759,14 +938,14 @@ export default function EnviarSimuladoPage() {
               </div>
               <span className="font-bold text-xs text-white block">Gabarito Oficial ENEM</span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                Régua padrão oficial do INEP para essas {studentAnswers?.length} questões.
+                Régua padrão oficial do INEP para o {selectedDay === "DIA_1" ? "1º Dia" : "2º Dia"}.
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => setOfficialKeyMode("UPLOAD_PDF")}
-              className={`p-4 rounded-2xl text-left border transition-all ${
+              className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
                 officialKeyMode === "UPLOAD_PDF"
                   ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
                   : "bg-slate-900 border-slate-800 hover:border-slate-700"
@@ -784,7 +963,7 @@ export default function EnviarSimuladoPage() {
             <button
               type="button"
               onClick={() => setOfficialKeyMode("PASTE_TEXT")}
-              className={`p-4 rounded-2xl text-left border transition-all ${
+              className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
                 officialKeyMode === "PASTE_TEXT"
                   ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
                   : "bg-slate-900 border-slate-800 hover:border-slate-700"
@@ -854,7 +1033,8 @@ export default function EnviarSimuladoPage() {
           {/* Comparação Preliminar */}
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
             <span className="text-slate-300">
-              Pronto para corrigir as <strong>{studentAnswers?.length} questões</strong> (Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")}).
+              Pronto para corrigir as <strong>{studentAnswers?.length} questões</strong> do{" "}
+              <strong>{selectedDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}</strong>.
             </span>
           </div>
 
@@ -900,7 +1080,7 @@ export default function EnviarSimuladoPage() {
               Correção de {correctionSummary.totalQuestions} Questões Concluída!
             </h2>
             <p className="text-xs text-slate-300">
-              Intervalo corrigido: {correctionSummary.rangeLabel}. As questões incorretas foram catalogadas no Banco de Erros.
+              {correctionSummary.dayTitle} — {correctionSummary.rangeLabel}. As questões incorretas foram catalogadas no Banco de Erros.
             </p>
           </div>
 
@@ -929,7 +1109,7 @@ export default function EnviarSimuladoPage() {
             <div className="space-y-3 pt-2">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-400" />
-                Detalhamento dos Erros Catalogados ({correctionSummary.rangeLabel}):
+                Detalhamento dos Erros Catalogados ({correctionSummary.dayTitle}):
               </h3>
               <div className="space-y-2.5 max-h-80 overflow-y-auto custom-scrollbar pr-1">
                 {correctionSummary.wrongItems.map((err) => (
