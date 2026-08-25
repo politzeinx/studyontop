@@ -10,8 +10,12 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/context/auth-context";
 
 export default function DesempenhoPage() {
+  const { user } = useAuth();
+  const isDemo = user?.isDemo ?? true;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -39,20 +43,32 @@ export default function DesempenhoPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-5">
           <span className="text-xs text-slate-400 font-semibold">Nota Média Geral Estimada</span>
-          <div className="text-3xl font-black text-white my-2">748,5</div>
-          <p className="text-xs text-emerald-400 font-medium">+24 pontos desde o último mês</p>
+          <div className="text-3xl font-black text-white my-2">
+            {isDemo ? "748,5" : "---"}
+          </div>
+          <p className={`text-xs font-medium ${isDemo ? "text-emerald-400" : "text-slate-400"}`}>
+            {isDemo ? "+24 pontos desde o último mês" : "Calibrando... Realize seu 1º simulado"}
+          </p>
         </Card>
 
         <Card className="p-5">
           <span className="text-xs text-slate-400 font-semibold">Consistência de Resposta</span>
-          <div className="text-3xl font-black text-emerald-400 my-2">88%</div>
-          <p className="text-xs text-slate-400">Padrão coerente (sem distorções de chute em fáceis)</p>
+          <div className="text-3xl font-black text-emerald-400 my-2">
+            {isDemo ? "88%" : "100%"}
+          </div>
+          <p className="text-xs text-slate-400">
+            {isDemo ? "Padrão coerente (sem distorções de chute em fáceis)" : "Aguardando primeiro teste"}
+          </p>
         </Card>
 
         <Card className="p-5">
           <span className="text-xs text-slate-400 font-semibold">Simulados Realizados</span>
-          <div className="text-3xl font-black text-indigo-400 my-2">12</div>
-          <p className="text-xs text-slate-400">540 questões resolvidas e catalogadas</p>
+          <div className="text-3xl font-black text-indigo-400 my-2">
+            {isDemo ? "12" : "0"}
+          </div>
+          <p className="text-xs text-slate-400">
+            {isDemo ? "540 questões resolvidas e catalogadas" : "0 questões resolvidas até o momento"}
+          </p>
         </Card>
       </div>
     </div>

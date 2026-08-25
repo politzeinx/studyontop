@@ -17,9 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { parseTextGabarito, ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
 
 export default function EnviarSimuladoPage() {
-  const [textGabarito, setTextGabarito] = useState(
-    "01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C\n08-B\n09-D\n10-E"
-  );
+  const [textGabarito, setTextGabarito] = useState("");
   const [parsedItems, setParsedItems] = useState<ParsedGabaritoItem[] | null>(null);
   const [unrecognizedLines, setUnrecognizedLines] = useState<string[]>([]);
   const [isConfirmed, setIsConfirmed] = useState(false);

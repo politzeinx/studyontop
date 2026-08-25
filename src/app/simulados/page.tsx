@@ -5,40 +5,46 @@ import { Plus, FileCheck2, Sparkles, Filter, Clock, CheckCircle2 } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/context/auth-context";
 
 export default function SimuladosPage() {
-  const previousSimulations = [
-    {
-      id: "sim-1",
-      title: "Simulado Estilo ENEM Recente 2024 — Dia 2 (Natureza e Matemática)",
-      date: "Ontem às 16:30",
-      totalQuestions: 90,
-      correctCount: 71,
-      estimatedTri: 748.5,
-      consistency: "Alta (89%)",
-      status: "CONCLUIDO",
-    },
-    {
-      id: "sim-2",
-      title: "Simulado Adaptativo — Foco em Fraquezas (Física & Geometria)",
-      date: "21/08/2026",
-      totalQuestions: 30,
-      correctCount: 22,
-      estimatedTri: 715.0,
-      consistency: "Média (78%)",
-      status: "CONCLUIDO",
-    },
-    {
-      id: "sim-3",
-      title: "ENEM 2023 Oficial — Aplicação Regular",
-      date: "14/08/2026",
-      totalQuestions: 45,
-      correctCount: 38,
-      estimatedTri: 780.2,
-      consistency: "Muito Alta (94%)",
-      status: "CONCLUIDO",
-    },
-  ];
+  const { user } = useAuth();
+  const isDemo = user?.isDemo ?? true;
+
+  const previousSimulations = isDemo
+    ? [
+        {
+          id: "sim-1",
+          title: "Simulado Estilo ENEM Recente 2024 — Dia 2 (Natureza e Matemática)",
+          date: "Ontem às 16:30",
+          totalQuestions: 90,
+          correctCount: 71,
+          estimatedTri: 748.5,
+          consistency: "Alta (89%)",
+          status: "CONCLUIDO",
+        },
+        {
+          id: "sim-2",
+          title: "Simulado Adaptativo — Foco em Fraquezas (Física & Geometria)",
+          date: "21/08/2026",
+          totalQuestions: 30,
+          correctCount: 22,
+          estimatedTri: 715.0,
+          consistency: "Média (78%)",
+          status: "CONCLUIDO",
+        },
+        {
+          id: "sim-3",
+          title: "ENEM 2023 Oficial — Aplicação Regular",
+          date: "14/08/2026",
+          totalQuestions: 45,
+          correctCount: 38,
+          estimatedTri: 780.2,
+          consistency: "Muito Alta (94%)",
+          status: "CONCLUIDO",
+        },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -139,46 +145,61 @@ export default function SimuladosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {previousSimulations.map((sim) => (
-            <div
-              key={sim.id}
-              className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-white">{sim.title}</h4>
-                  <Badge variant="success" className="text-[10px]">
-                    {sim.status}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-400">
-                  <span>{sim.date}</span>
-                  <span>•</span>
-                  <span>
-                    Acertos: <strong className="text-white">{sim.correctCount}/{sim.totalQuestions}</strong>
-                  </span>
-                  <span>•</span>
-                  <span>
-                    Consistência: <strong className="text-emerald-400">{sim.consistency}</strong>
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 self-end md:self-auto">
-                <div className="text-right">
-                  <span className="text-xs text-slate-400 block">TRI Estimada</span>
-                  <span className="text-base font-extrabold text-indigo-400">
-                    {sim.estimatedTri.toFixed(1)}
-                  </span>
-                </div>
-                <Link href={`/simulados/${sim.id}`}>
-                  <Button variant="outline" size="sm" className="text-xs">
-                    Ver Relatório
-                  </Button>
-                </Link>
-              </div>
+          {previousSimulations.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 space-y-3">
+              <FileCheck2 className="w-8 h-8 mx-auto text-indigo-400/60" />
+              <p className="text-xs sm:text-sm">
+                Você ainda não realizou nenhum simulado nesta conta.
+              </p>
+              <Link href="/simulados/novo">
+                <Button variant="primary" size="sm" className="text-xs gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Realizar Primeiro Simulado</span>
+                </Button>
+              </Link>
             </div>
-          ))}
+          ) : (
+            previousSimulations.map((sim) => (
+              <div
+                key={sim.id}
+                className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-semibold text-white">{sim.title}</h4>
+                    <Badge variant="success" className="text-[10px]">
+                      {sim.status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-slate-400">
+                    <span>{sim.date}</span>
+                    <span>•</span>
+                    <span>
+                      Acertos: <strong className="text-white">{sim.correctCount}/{sim.totalQuestions}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Consistência: <strong className="text-emerald-400">{sim.consistency}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 self-end md:self-auto">
+                  <div className="text-right">
+                    <span className="text-xs text-slate-400 block">TRI Estimada</span>
+                    <span className="text-base font-extrabold text-indigo-400">
+                      {sim.estimatedTri.toFixed(1)}
+                    </span>
+                  </div>
+                  <Link href={`/simulados/${sim.id}`}>
+                    <Button variant="outline" size="sm" className="text-xs">
+                      Ver Relatório
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

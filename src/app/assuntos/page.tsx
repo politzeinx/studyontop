@@ -1,53 +1,84 @@
 "use client";
 
-import { BookOpen, Search, Target, Filter } from "lucide-react";
+import { BookOpen, Search, Target, Filter, Info } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/context/auth-context";
 
 export default function AssuntosPage() {
-  const subjectsMap = [
-    {
-      area: "Matemática",
-      subject: "Geometria Espacial",
-      domain: 35,
-      level: "PRIORIDADE",
-      gainPotential: "MUITO ALTO",
-      totalQuestions: 18,
-      accuracy: 44,
-      isContinuousRevision: false,
-    },
-    {
-      area: "Ciências da Natureza",
-      subject: "Química Orgânica",
-      domain: 74,
-      level: "ALTO",
-      gainPotential: "ALTO",
-      totalQuestions: 24,
-      accuracy: 83,
-      isContinuousRevision: true,
-    },
-    {
-      area: "Ciências da Natureza",
-      subject: "Termodinâmica",
-      domain: 48,
-      level: "ATENCAO",
-      gainPotential: "ALTO",
-      totalQuestions: 14,
-      accuracy: 50,
-      isContinuousRevision: false,
-    },
-    {
-      area: "Matemática",
-      subject: "Porcentagem & Matemática Financeira",
-      domain: 91,
-      level: "ALTO",
-      gainPotential: "BAIXO",
-      totalQuestions: 30,
-      accuracy: 93,
-      isContinuousRevision: false,
-    },
-  ];
+  const { user } = useAuth();
+  const isDemo = user?.isDemo ?? true;
+
+  const subjectsMap = isDemo
+    ? [
+        {
+          area: "Matemática",
+          subject: "Geometria Espacial",
+          domain: 35,
+          level: "PRIORIDADE",
+          gainPotential: "MUITO ALTO",
+          isContinuousRevision: false,
+        },
+        {
+          area: "Ciências da Natureza",
+          subject: "Química Orgânica",
+          domain: 74,
+          level: "ALTO",
+          gainPotential: "ALTO",
+          isContinuousRevision: true,
+        },
+        {
+          area: "Ciências da Natureza",
+          subject: "Termodinâmica",
+          domain: 48,
+          level: "ATENCAO",
+          gainPotential: "ALTO",
+          isContinuousRevision: false,
+        },
+        {
+          area: "Matemática",
+          subject: "Porcentagem & Matemática Financeira",
+          domain: 91,
+          level: "ALTO",
+          gainPotential: "BAIXO",
+          isContinuousRevision: false,
+        },
+      ]
+    : [
+        {
+          area: "Matemática",
+          subject: "Geometria Espacial",
+          domain: 0,
+          level: "A CALIBRAR",
+          gainPotential: "MUITO ALTO",
+          isContinuousRevision: false,
+        },
+        {
+          area: "Ciências da Natureza",
+          subject: "Química Orgânica",
+          domain: 0,
+          level: "A CALIBRAR",
+          gainPotential: "ALTO",
+          isContinuousRevision: true,
+        },
+        {
+          area: "Ciências da Natureza",
+          subject: "Termodinâmica",
+          domain: 0,
+          level: "A CALIBRAR",
+          gainPotential: "ALTO",
+          isContinuousRevision: false,
+        },
+        {
+          area: "Matemática",
+          subject: "Porcentagem & Matemática Financeira",
+          domain: 0,
+          level: "A CALIBRAR",
+          gainPotential: "MÉDIO",
+          isContinuousRevision: false,
+        },
+      ];
 
   return (
     <div className="space-y-6">
@@ -61,6 +92,15 @@ export default function AssuntosPage() {
           Diagnóstico contínuo do seu nível de domínio em cada microtópico da Matriz do ENEM
         </p>
       </div>
+
+      {!isDemo && (
+        <div className="p-4 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-slate-300 flex items-center gap-3">
+          <Info className="w-4 h-4 text-indigo-400 shrink-0" />
+          <p>
+            O seu nível de domínio em cada microtópico será calculado de 0 a 100% conforme você responder questões nos simulados ou escanear suas folhas de resposta.
+          </p>
+        </div>
+      )}
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -77,6 +117,8 @@ export default function AssuntosPage() {
                     ? "destructive"
                     : sub.level === "ATENCAO"
                     ? "warning"
+                    : sub.level === "A CALIBRAR"
+                    ? "outline"
                     : "success"
                 }
                 className="text-[10px]"
@@ -88,7 +130,9 @@ export default function AssuntosPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-slate-300">
                 <span>Nível de Domínio</span>
-                <span className="font-bold text-white">{sub.domain}%</span>
+                <span className="font-bold text-white">
+                  {sub.domain === 0 && !isDemo ? "0% (Não Avaliado)" : `${sub.domain}%`}
+                </span>
               </div>
               <Progress
                 value={sub.domain}
