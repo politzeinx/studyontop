@@ -1,8 +1,8 @@
 [
   {
     "id": "user-luis-teles",
-    "name": "Luis Teles",
     "email": "luisfilocreao@gmail.com",
+    "name": "Luis Teles",
     "targetCourse": "Engenharia de Software",
     "targetCollege": "UEPA",
     "quotaType": "EP_GERAL",
