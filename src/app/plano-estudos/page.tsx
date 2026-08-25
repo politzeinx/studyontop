@@ -14,60 +14,103 @@ import {
   Check,
   Flame,
   ArrowRight,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { generateAdaptiveStudyPlan } from "@/services/study-plan/study-plan-generator";
-import { KnowledgeArea } from "@/types";
+import { KnowledgeArea, PriorityLevel, GainPotential, DomainLevel } from "@/types";
+import { useAuth } from "@/context/auth-context";
 
 export default function PlanoEstudosPage() {
+  const { user } = useAuth();
+  const isDemo = user?.isDemo ?? true;
+
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
-  const [studyHoursPerDay, setStudyHoursPerDay] = useState(3.0);
   const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set());
 
-  // Gera o plano adaptativo
+  const studyHoursPerDay = user?.studyHoursPerDay || 3.0;
+  const studyDaysPerWeek = user?.studyDaysPerWeek || 6;
+  const targetCourse = user?.targetCourse || "Engenharia de Software";
+
+  // Gera o plano adaptativo conforme perfil real ou demo
+  const domainInputs = isDemo
+    ? [
+        {
+          subject: "Geometria Espacial",
+          subsubject: "Prismas e Cilindros",
+          area: KnowledgeArea.MATEMATICA,
+          domainScore: 35,
+          accuracyRate: 44,
+          totalQuestions: 18,
+          recentErrorsCount: 3,
+          recurrenceScoreEnemRecent: 0.9,
+        },
+        {
+          subject: "Termodinâmica",
+          subsubject: "Ciclo de Carnot",
+          area: KnowledgeArea.NATUREZA,
+          domainScore: 48,
+          accuracyRate: 50,
+          totalQuestions: 14,
+          recentErrorsCount: 2,
+          recurrenceScoreEnemRecent: 0.8,
+          isContinuousRevision: true,
+        },
+        {
+          subject: "Química Orgânica",
+          subsubject: "Reações e Isomeria",
+          area: KnowledgeArea.NATUREZA,
+          domainScore: 74,
+          accuracyRate: 83,
+          totalQuestions: 24,
+          recentErrorsCount: 1,
+          recurrenceScoreEnemRecent: 0.95,
+          isContinuousRevision: true,
+        },
+      ]
+    : [
+        {
+          subject: "Simulado Diagnóstico Inicial",
+          subsubject: "Nivelamento Geral ENEM",
+          area: KnowledgeArea.MATEMATICA,
+          domainScore: 0,
+          accuracyRate: 0,
+          totalQuestions: 0,
+          recentErrorsCount: 0,
+          recurrenceScoreEnemRecent: 1.0,
+        },
+        {
+          subject: "Matemática Básica & Funções",
+          subsubject: "Fundamentos para o ENEM",
+          area: KnowledgeArea.MATEMATICA,
+          domainScore: 0,
+          accuracyRate: 0,
+          totalQuestions: 0,
+          recentErrorsCount: 0,
+          recurrenceScoreEnemRecent: 0.95,
+        },
+        {
+          subject: "Ciências da Natureza",
+          subsubject: "Ecologia e Termologia",
+          area: KnowledgeArea.NATUREZA,
+          domainScore: 0,
+          accuracyRate: 0,
+          totalQuestions: 0,
+          recentErrorsCount: 0,
+          recurrenceScoreEnemRecent: 0.9,
+        },
+      ];
+
   const plan = generateAdaptiveStudyPlan(
     {
       studyHoursPerDay,
-      studyDaysPerWeek: 6,
-      targetCourse: "Medicina",
+      studyDaysPerWeek,
+      targetCourse,
     },
-    [
-      {
-        subject: "Geometria Espacial",
-        subsubject: "Prismas e Cilindros",
-        area: KnowledgeArea.MATEMATICA,
-        domainScore: 35,
-        accuracyRate: 44,
-        totalQuestions: 18,
-        recentErrorsCount: 3,
-        recurrenceScoreEnemRecent: 0.9,
-      },
-      {
-        subject: "Termodinâmica",
-        subsubject: "Ciclo de Carnot",
-        area: KnowledgeArea.NATUREZA,
-        domainScore: 48,
-        accuracyRate: 50,
-        totalQuestions: 14,
-        recentErrorsCount: 2,
-        recurrenceScoreEnemRecent: 0.8,
-        isContinuousRevision: true,
-      },
-      {
-        subject: "Química Orgânica",
-        subsubject: "Reações e Isomeria",
-        area: KnowledgeArea.NATUREZA,
-        domainScore: 74,
-        accuracyRate: 83,
-        totalQuestions: 24,
-        recentErrorsCount: 1,
-        recurrenceScoreEnemRecent: 0.95,
-        isContinuousRevision: true,
-      },
-    ]
+    domainInputs
   );
 
   const currentSchedule = plan.dailySchedules[selectedDayIdx] || plan.dailySchedules[0];
@@ -97,16 +140,32 @@ export default function PlanoEstudosPage() {
             Plano de Estudos Adaptativo
           </h1>
           <p className="text-sm text-slate-400">
-            Cronograma diário e semanal recalculado automaticamente com base nas suas lacunas e horas disponíveis
+            {isDemo
+              ? "Cronograma diário e semanal recalculado automaticamente com base nas suas lacunas e horas disponíveis"
+              : `Cronograma personalizado para ${user?.name || "você"} • Foco: ${targetCourse} (${studyHoursPerDay}h/dia)`}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Badge variant="cyan" className="text-xs font-mono">
+          {isDemo && (
+            <Badge variant="cyan" className="text-[10px]">
+              Modo Demo
+            </Badge>
+          )}
+          <Badge variant="default" className="text-xs font-mono">
             {plan.weeklyTargetHours}h / semana
           </Badge>
         </div>
       </div>
+
+      {!isDemo && (
+        <div className="p-4 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-slate-300 flex items-center gap-3">
+          <Info className="w-4 h-4 text-indigo-400 shrink-0" />
+          <p>
+            Este é o seu roteiro inicial de nivelamento. Assim que você enviar um simulado ou gabarito, os blocos de estudo se reorganizarão priorizando automaticamente as matérias em que você teve maior dificuldade.
+          </p>
+        </div>
+      )}
 
       {/* Week Day Pills */}
       <div className="grid grid-cols-7 gap-2">
@@ -237,6 +296,13 @@ export default function PlanoEstudosPage() {
                         <Button variant="outline" size="sm" className="text-xs gap-1.5 text-indigo-300">
                           <Layers className="w-3.5 h-3.5" />
                           <span>Revisar</span>
+                        </Button>
+                      </Link>
+                    ) : block.type === "SIMULADO" ? (
+                      <Link href="/simulados/novo">
+                        <Button variant="primary" size="sm" className="text-xs gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Iniciar Simulado</span>
                         </Button>
                       </Link>
                     ) : (
