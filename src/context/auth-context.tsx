@@ -119,7 +119,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const syncProfileFromServer = async (email: string) => {
     try {
-      const res = await fetch(`/api/auth/profile?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      const res = await fetch(
+        `/api/auth/profile?email=${encodeURIComponent(email.trim().toLowerCase())}&_t=${Date.now()}`,
+        {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+          },
+        }
+      );
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
@@ -128,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {
-      // Fallback silencioso
+      // Falha de rede silenciosa
     }
   };
 
@@ -150,7 +159,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }
 
-    // Auto sincronização quando a janela do navegador ganha foco (ao trocar do celular pro PC)
     const handleFocus = () => {
       const activeStored = localStorage.getItem("studyontop_user");
       if (activeStored) {
@@ -173,8 +181,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshProfile = async () => {
-    if (user?.email && !user.isDemo) {
-      await syncProfileFromServer(user.email);
+    const activeStored = typeof window !== "undefined" ? localStorage.getItem("studyontop_user") : null;
+    const currentEmail = user?.email || (activeStored ? JSON.parse(activeStored).email : null);
+    if (currentEmail) {
+      await syncProfileFromServer(currentEmail);
     }
   };
 
@@ -182,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         body: JSON.stringify({ email, password }),
       });
 
@@ -214,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         body: JSON.stringify(profileData),
       });
 
@@ -250,15 +260,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...updates,
     };
 
-    // Atualização otimista imediata no cliente
-    const optimistic = { ...user, ...updates };
-    setUser(optimistic);
-    localStorage.setItem("studyontop_user", JSON.stringify(optimistic));
-
     try {
       const res = await fetch("/api/auth/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         body: JSON.stringify(payload),
       });
 
@@ -270,10 +275,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { success: true };
         }
       }
-      return { success: true };
-    } catch (e) {
-      return { success: true };
-    }
+    } catch (e) {}
+
+    // Fallback local se estiver offline
+    const optimistic = { ...user, ...updates };
+    setUser(optimistic);
+    localStorage.setItem("studyontop_user", JSON.stringify(optimistic));
+    return { success: true };
   };
 
   return (
