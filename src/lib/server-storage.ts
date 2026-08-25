@@ -9,58 +9,59 @@ export interface StoredUser extends UserProfile {
 // Caminho do arquivo de banco de dados JSON no servidor
 const DB_FILE = path.join(process.cwd(), "src", "lib", "data", "users-store.json");
 
-// Memória em runtime para cache
-const memoryStore = new Map<string, StoredUser>();
-
-function loadStoreFromFile() {
+function readAllUsersFromDisk(): StoredUser[] {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, "utf-8");
       if (data.trim()) {
-        const list: StoredUser[] = JSON.parse(data);
-        list.forEach((u) => memoryStore.set(u.email.toLowerCase().trim(), u));
+        return JSON.parse(data);
       }
     }
   } catch (e) {
-    // Fallback silencioso
+    console.error("[server-storage] Erro ao ler users-store.json:", e);
   }
+  return [];
 }
 
-function saveStoreToFile() {
+function writeAllUsersToDisk(users: StoredUser[]) {
   try {
     const dir = path.dirname(DB_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const list = Array.from(memoryStore.values());
-    fs.writeFileSync(DB_FILE, JSON.stringify(list, null, 2), "utf-8");
+    fs.writeFileSync(DB_FILE, JSON.stringify(users, null, 2), "utf-8");
   } catch (e) {
-    // Em Vercel/Serverless o FS é read-only, memoryStore atua durante o ciclo
+    console.error("[server-storage] Erro ao gravar users-store.json:", e);
   }
 }
 
-// Carrega os dados na inicialização
-loadStoreFromFile();
-
 export function findUserByEmail(email: string): StoredUser | null {
-  loadStoreFromFile();
   const normalized = email.toLowerCase().trim();
-  return memoryStore.get(normalized) || null;
+  const allUsers = readAllUsersFromDisk();
+  const found = allUsers.find((u) => u.email.toLowerCase().trim() === normalized);
+  return found || null;
 }
 
 export function saveUser(user: StoredUser): StoredUser {
   const normalized = user.email.toLowerCase().trim();
-  const existing = memoryStore.get(normalized);
-  
-  // Preserva a senha se não for passada uma nova
-  const updatedUser: StoredUser = {
+  const allUsers = readAllUsersFromDisk();
+  const existingIdx = allUsers.findIndex((u) => u.email.toLowerCase().trim() === normalized);
+
+  const existing = existingIdx >= 0 ? allUsers[existingIdx] : null;
+
+  const mergedUser: StoredUser = {
     ...existing,
     ...user,
     email: normalized,
     password: user.password || existing?.password || "",
   };
 
-  memoryStore.set(normalized, updatedUser);
-  saveStoreToFile();
-  return updatedUser;
+  if (existingIdx >= 0) {
+    allUsers[existingIdx] = mergedUser;
+  } else {
+    allUsers.push(mergedUser);
+  }
+
+  writeAllUsersToDisk(allUsers);
+  return mergedUser;
 }

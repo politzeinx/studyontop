@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, User, Sliders, CheckCircle2, X, Sparkles, Loader2 } from "lucide-react";
+import { Settings, User, Sliders, CheckCircle2, X, Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/context/auth-context";
 
 export default function ConfiguracoesPage() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, refreshProfile } = useAuth();
 
   const [name, setName] = useState(user?.name || "Luis Teles");
   const [targetCourse, setTargetCourse] = useState(user?.targetCourse || "Engenharia de Software");
@@ -23,18 +23,32 @@ export default function ConfiguracoesPage() {
   const [studyDaysPerWeek, setStudyDaysPerWeek] = useState(user?.studyDaysPerWeek || 7);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Puxa sempre a versão mais recente do servidor ao entrar na página
+  useEffect(() => {
+    refreshProfile();
+  }, []);
 
   useEffect(() => {
     if (user) {
-      setName(user.name);
-      setTargetCourse(user.targetCourse);
-      setTargetCollege(user.targetCollege);
+      setName(user.name || "");
+      setTargetCourse(user.targetCourse || "Engenharia de Software");
+      setTargetCollege(user.targetCollege || "USP");
       setQuotaType(user.quotaType || "AMPLA");
-      setTargetScore(user.targetScore);
-      setStudyHoursPerDay(user.studyHoursPerDay);
-      setStudyDaysPerWeek(user.studyDaysPerWeek);
+      setTargetScore(user.targetScore || 765);
+      setStudyHoursPerDay(user.studyHoursPerDay || 3);
+      setStudyDaysPerWeek(user.studyDaysPerWeek || 7);
     }
-  }, [user]);
+  }, [
+    user?.name,
+    user?.targetCourse,
+    user?.targetCollege,
+    user?.quotaType,
+    user?.targetScore,
+    user?.studyHoursPerDay,
+    user?.studyDaysPerWeek,
+  ]);
 
   // Recalcula a nota de corte estimada se o curso ou a cota mudar
   const handleCourseChange = (newCourse: string) => {
@@ -45,6 +59,12 @@ export default function ConfiguracoesPage() {
   const handleQuotaChange = (newQuota: QuotaType) => {
     setQuotaType(newQuota);
     setTargetScore(estimateSisuCutoffScore(targetCourse, newQuota));
+  };
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshProfile();
+    setIsRefreshing(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -65,20 +85,32 @@ export default function ConfiguracoesPage() {
     setIsSaving(false);
     setIsSaved(true);
 
-    // Auto esconde a notificação após 4 segundos
     setTimeout(() => setIsSaved(false), 4000);
   };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-          <Settings className="w-6 h-6 text-indigo-400" />
-          Configurações da Conta & Preferências
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400">
-          Personalize seu objetivo ENEM, modalidade de cotas, horas de estudo diárias e nota de corte
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <Settings className="w-6 h-6 text-indigo-400" />
+            Configurações da Conta & Preferências
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400">
+            Personalize seu objetivo ENEM, modalidade de cotas, horas de estudo diárias e nota de corte
+          </p>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="text-xs gap-1.5 self-start sm:self-auto"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+          <span>{isRefreshing ? "Sincronizando..." : "Sincronizar com Nuvem"}</span>
+        </Button>
       </div>
 
       {/* Floating Toast Notification visível em Celular e Desktop */}
