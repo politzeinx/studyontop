@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail } from "@/lib/server-storage";
+import { findUserByEmail, saveUser } from "@/lib/server-storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,8 +23,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Se o usuário tem senha cadastrada, valida a correspondência exata
-    if (storedUser.password && storedUser.password !== password.trim()) {
+    // Se o usuário ainda não tinha senha definida (conta pré-existente), registra a senha digitada agora
+    if (!storedUser.password && password.trim()) {
+      storedUser.password = password.trim();
+      saveUser(storedUser);
+    } else if (storedUser.password && storedUser.password !== password.trim()) {
       return NextResponse.json(
         { error: "Senha incorreta. Verifique a senha digitada e tente novamente." },
         { status: 401 }

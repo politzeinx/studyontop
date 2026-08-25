@@ -1,0 +1,17 @@
+[
+  {
+    "id": "user-luis-teles",
+    "name": "Luis Teles",
+    "email": "luisfilocreao@gmail.com",
+    "targetCourse": "Engenharia de Software",
+    "targetCollege": "USP",
+    "quotaType": "AMPLA",
+    "targetScore": 765,
+    "studyHoursPerDay": 3,
+    "studyDaysPerWeek": 7,
+    "isDemo": false,
+    "streakDays": 1,
+    "currentTriScore": 500.0,
+    "password": ""
+  }
+]
