@@ -20,6 +20,9 @@ import {
   Check,
   ArrowLeft,
   FileBadge,
+  Sliders,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -28,18 +31,19 @@ import { ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
 import { useAuth } from "@/context/auth-context";
 import { getEnemQuestionMetadata, EnemQuestionMeta } from "@/lib/data/enem-official-matrix";
 
-type ExamDayMode = "DIA_1" | "DIA_2" | "AREA_45";
+type SelectionMode = "PRESET" | "CUSTOM_RANGE" | "SPECIFIC_COUNT";
 type WizardStep = "STUDENT_ANSWERS" | "OFFICIAL_KEY" | "RESULT";
 
 export default function EnviarSimuladoPage() {
   const { user, updateProfile } = useAuth();
 
-  // Configuração do Simulado
-  const [examDay, setExamDay] = useState<ExamDayMode>("DIA_1");
+  // Configuração da Seleção de Questões
+  const [startQuestion, setStartQuestion] = useState<number>(1);
+  const [endQuestion, setEndQuestion] = useState<number>(15);
   const [currentStep, setCurrentStep] = useState<WizardStep>("STUDENT_ANSWERS");
 
   // Etapa 1: Respostas do Aluno
-  const [studentInputMode, setStudentInputMode] = useState<"PDF" | "TEXT" | "GRID">("PDF");
+  const [studentInputMode, setStudentInputMode] = useState<"GRID" | "PDF" | "TEXT">("GRID");
   const [studentPdfName, setStudentPdfName] = useState<string | null>(null);
   const [studentText, setStudentText] = useState("");
   const [studentAnswers, setStudentAnswers] = useState<ParsedGabaritoItem[] | null>(null);
@@ -60,7 +64,7 @@ export default function EnviarSimuladoPage() {
     wrongCount: number;
     scorePct: number;
     estimatedTri: number;
-    dayLabel: string;
+    rangeLabel: string;
     wrongItems: Array<{
       questionNumber: number;
       userAlt: string;
@@ -71,11 +75,16 @@ export default function EnviarSimuladoPage() {
     }>;
   } | null>(null);
 
-  const startQuestionNum = examDay === "DIA_2" ? 91 : 1;
-  const totalQuestionsCount = examDay === "AREA_45" ? 45 : 90;
-  const endQuestionNum = startQuestionNum + totalQuestionsCount - 1;
+  // Define os presets rápidos
+  const handleApplyPreset = (start: number, end: number) => {
+    setStartQuestion(start);
+    setEndQuestion(end);
+    setStudentAnswers(null);
+  };
 
-  // Monta a grade de questões (1 a 90 ou 91 a 180)
+  const totalQuestionsCount = Math.max(1, endQuestion - startQuestion + 1);
+
+  // Monta a grade estritamente para o intervalo selecionado
   const buildInitialGrid = (existingItems?: ParsedGabaritoItem[]): ParsedGabaritoItem[] => {
     const map = new Map<number, "A" | "B" | "C" | "D" | "E">();
     if (existingItems) {
@@ -85,7 +94,7 @@ export default function EnviarSimuladoPage() {
     const result: ParsedGabaritoItem[] = [];
     const defaultAlts: Array<"A" | "B" | "C" | "D" | "E"> = ["A", "B", "C", "D", "E"];
 
-    for (let q = startQuestionNum; q <= endQuestionNum; q++) {
+    for (let q = startQuestion; q <= endQuestion; q++) {
       const existing = map.get(q);
       result.push({
         questionNumber: q,
@@ -108,7 +117,7 @@ export default function EnviarSimuladoPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("targetCount", totalQuestionsCount.toString());
+      formData.append("targetCount", endQuestion.toString());
 
       const res = await fetch("/api/gabarito/parse", {
         method: "POST",
@@ -138,7 +147,7 @@ export default function EnviarSimuladoPage() {
       const res = await fetch("/api/gabarito/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: studentText, targetCount: totalQuestionsCount }),
+        body: JSON.stringify({ rawText: studentText, targetCount: endQuestion }),
       });
 
       const data = await res.json();
@@ -164,7 +173,7 @@ export default function EnviarSimuladoPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("targetCount", totalQuestionsCount.toString());
+      formData.append("targetCount", endQuestion.toString());
 
       const res = await fetch("/api/gabarito/parse", {
         method: "POST",
@@ -191,7 +200,7 @@ export default function EnviarSimuladoPage() {
       const res = await fetch("/api/gabarito/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: officialText, targetCount: totalQuestionsCount }),
+        body: JSON.stringify({ rawText: officialText, targetCount: endQuestion }),
       });
 
       const data = await res.json();
@@ -214,16 +223,7 @@ export default function EnviarSimuladoPage() {
     );
   };
 
-  const updateOfficialAnswer = (qNum: number, alt: "A" | "B" | "C" | "D" | "E") => {
-    if (!officialAnswers) return;
-    setOfficialAnswers(
-      officialAnswers.map((item) =>
-        item.questionNumber === qNum ? { ...item, alternative: alt } : item
-      )
-    );
-  };
-
-  // Executa a Correção Cruzando as Respostas do Aluno (Etapa 1) com o Gabarito Oficial (Etapa 2)
+  // Executa a Correção Cruzando as Respostas do Aluno com o Gabarito Oficial
   const handleRunCorrection = async () => {
     if (!studentAnswers || studentAnswers.length === 0) return;
     setIsProcessingCorrection(true);
@@ -233,7 +233,6 @@ export default function EnviarSimuladoPage() {
     if (officialAnswers && officialAnswers.length > 0) {
       officialAnswers.forEach((o) => officialMap.set(o.questionNumber, o.alternative));
     } else {
-      // Se usar o padrão oficial da matriz
       studentAnswers.forEach((s) => {
         const meta = getEnemQuestionMetadata(s.questionNumber);
         officialMap.set(s.questionNumber, meta.officialKey);
@@ -274,7 +273,7 @@ export default function EnviarSimuladoPage() {
     const scorePct = Math.round((correct / total) * 100);
     const calculatedTri = Math.round(520 + (correct / total) * 310);
 
-    // Salva os erros no Banco de Erros
+    // Salva no Banco de Erros
     const errorsToSave = wrongList.map((item) => ({
       id: `err-gabarito-${item.questionNumber}-${Date.now()}`,
       questionCode: `ENEM — Questão ${item.questionNumber.toString().padStart(2, "0")}`,
@@ -312,12 +311,7 @@ export default function EnviarSimuladoPage() {
       streakDays: (user?.streakDays || 0) + 1,
     });
 
-    const dayLabel =
-      examDay === "DIA_1"
-        ? "1º Dia (Linguagens e Humanas)"
-        : examDay === "DIA_2"
-        ? "2º Dia (Natureza e Matemática)"
-        : "Simulado 45 Questões";
+    const rangeLabel = `Questões ${startQuestion.toString().padStart(2, "0")} a ${endQuestion.toString().padStart(2, "0")}`;
 
     setCorrectionSummary({
       totalQuestions: total,
@@ -325,7 +319,7 @@ export default function EnviarSimuladoPage() {
       wrongCount: wrong,
       scorePct,
       estimatedTri: calculatedTri,
-      dayLabel,
+      rangeLabel,
       wrongItems: wrongList,
     });
 
@@ -339,10 +333,10 @@ export default function EnviarSimuladoPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
           <UploadCloud className="w-6 h-6 text-indigo-400" />
-          Envio de Gabarito & Correção em 2 Etapas
+          Envio de Gabarito & Correção Personalizada
         </h1>
         <p className="text-sm text-slate-400">
-          Envie primeiro as questões que você marcou na prova e em seguida o gabarito oficial para comparação precisa.
+          Escolha exatamente quantas questões deseja corrigir (de 5 a 90 questões), envie suas respostas e cruze com o gabarito oficial.
         </p>
       </div>
 
@@ -413,129 +407,184 @@ export default function EnviarSimuladoPage() {
       </div>
 
       {/* =========================================================================
-          ETAPA 1: RESPOSTAS MARCADAS PELO ALUNO
+          ETAPA 1: SELEÇÃO DO INTERVALO E RESPOSTAS MARCADAS PELO ALUNO
           ========================================================================= */}
       {currentStep === "STUDENT_ANSWERS" && (
         <Card className="p-6 space-y-6">
-          {/* Seletor Oficial do Dia do ENEM */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300 block">
-              1. Selecione o Caderno da Prova que você resolveu:
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {/* Seletor Dinâmico de Quantidade / Intervalo de Questões */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 block">
+                1. Quais questões você resolveu e deseja corrigir?
+              </label>
+              <Badge variant="cyan" className="text-xs font-bold">
+                {totalQuestionsCount} Questões Selecionadas (Q{startQuestion.toString().padStart(2, "0")} até Q{endQuestion.toString().padStart(2, "0")})
+              </Badge>
+            </div>
+
+            {/* Presets Rápidos */}
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setExamDay("DIA_1");
-                  setStudentAnswers(null);
-                }}
-                className={`p-3 rounded-xl text-left border transition-all ${
-                  examDay === "DIA_1"
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                onClick={() => handleApplyPreset(1, 10)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  startQuestion === 1 && endQuestion === 10
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
                     : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
                 }`}
               >
-                <span className="font-bold text-xs block">1º DIA DO ENEM (Q01 a Q90)</span>
-                <span className="text-[10px] opacity-80 block">Linguagens (1-45) & Humanas (46-90)</span>
+                10 Questões (01 a 10)
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setExamDay("DIA_2");
-                  setStudentAnswers(null);
-                }}
-                className={`p-3 rounded-xl text-left border transition-all ${
-                  examDay === "DIA_2"
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                onClick={() => handleApplyPreset(1, 15)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  startQuestion === 1 && endQuestion === 15
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
                     : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
                 }`}
               >
-                <span className="font-bold text-xs block">2º DIA DO ENEM (Q91 a Q180)</span>
-                <span className="text-[10px] opacity-80 block">Natureza (91-135) & Matemática (136-180)</span>
+                15 Questões (01 a 15)
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setExamDay("AREA_45");
-                  setStudentAnswers(null);
-                }}
-                className={`p-3 rounded-xl text-left border transition-all ${
-                  examDay === "AREA_45"
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                onClick={() => handleApplyPreset(1, 20)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  startQuestion === 1 && endQuestion === 20
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
                     : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
                 }`}
               >
-                <span className="font-bold text-xs block">1 ÁREA ESPECÍFICA (45 Qs)</span>
-                <span className="text-[10px] opacity-80 block">Simulado temático de 45 questões</span>
+                20 Questões (01 a 20)
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset(1, 45)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  startQuestion === 1 && endQuestion === 45
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                1 Área (01 a 45)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset(46, 90)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  startQuestion === 46 && endQuestion === 90
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                Humanas (46 a 90)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset(1, 90)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  startQuestion === 1 && endQuestion === 90
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                1º Dia Completo (01 a 90)
+              </button>
+            </div>
+
+            {/* Ajuste Fino Manual do Intervalo */}
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row items-center gap-4 text-xs">
+              <span className="text-slate-400 font-semibold">Ou personalize o intervalo exato:</span>
+              <div className="flex items-center gap-2">
+                <span>Da Questão:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={179}
+                  value={startQuestion}
+                  onChange={(e) => {
+                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                    setStartQuestion(val);
+                    if (val > endQuestion) setEndQuestion(val + 5);
+                    setStudentAnswers(null);
+                  }}
+                  className="w-16 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold text-center focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span>Até a Questão:</span>
+                <input
+                  type="number"
+                  min={startQuestion}
+                  max={180}
+                  value={endQuestion}
+                  onChange={(e) => {
+                    const val = Math.min(180, parseInt(e.target.value) || startQuestion);
+                    setEndQuestion(Math.max(startQuestion, val));
+                    setStudentAnswers(null);
+                  }}
+                  className="w-16 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold text-center focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
           {!studentAnswers ? (
             <div className="space-y-4 pt-2 border-t border-slate-800">
               <label className="text-xs font-bold text-slate-300 block">
-                2. Como deseja enviar suas {totalQuestionsCount} respostas?
+                2. Como deseja inserir suas {totalQuestionsCount} respostas?
               </label>
-              <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setStudentInputMode("PDF")}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                    studentInputMode === "PDF"
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Enviar PDF da sua Folha</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStudentInputMode("TEXT")}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                    studentInputMode === "TEXT"
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  <Edit3 className="w-4 h-4" />
-                  <span>Colar Texto</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStudentInputMode("GRID")}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                    studentInputMode === "GRID"
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                      : "text-slate-400 hover:text-white"
-                  }`}
+
+              {/* Botões de Ação Imediata */}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="glow"
+                  size="default"
+                  onClick={() => setStudentAnswers(buildInitialGrid())}
+                  className="gap-2 text-xs font-bold"
                 >
                   <FileCode className="w-4 h-4" />
-                  <span>Grade Manual ({totalQuestionsCount} Qs)</span>
-                </button>
+                  <span>Preencher Grade ({totalQuestionsCount} Questões)</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={() => setStudentInputMode(studentInputMode === "PDF" ? "GRID" : "PDF")}
+                  className="gap-2 text-xs"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>{studentInputMode === "PDF" ? "Ocultar PDF" : "Enviar Arquivo PDF"}</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={() => setStudentInputMode(studentInputMode === "TEXT" ? "GRID" : "TEXT")}
+                  className="gap-2 text-xs"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>{studentInputMode === "TEXT" ? "Ocultar Texto" : "Colar Texto"}</span>
+                </Button>
               </div>
 
+              {/* Upload de PDF opcional */}
               {studentInputMode === "PDF" && (
-                <div className="p-8 border-dashed border-2 border-indigo-500/30 hover:border-indigo-500/60 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 bg-slate-950/40">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                    <FileText className="w-8 h-8" />
-                  </div>
-                  <div className="space-y-1 max-w-sm">
-                    <h3 className="text-base font-bold text-white">
-                      {studentPdfName ? `PDF: ${studentPdfName}` : "Selecione o PDF das suas Respostas"}
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      O leitor extrai as questões marcadas e monta a grade para você revisar.
-                    </p>
-                  </div>
-
-                  <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs sm:text-sm font-bold transition-all bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 h-11 px-6 py-2.5 cursor-pointer">
+                <div className="p-6 border-dashed border-2 border-indigo-500/30 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 bg-slate-950/40">
+                  <h4 className="text-xs font-bold text-white">
+                    {studentPdfName ? `PDF: ${studentPdfName}` : `Selecione o PDF para extrair as ${totalQuestionsCount} questões`}
+                  </h4>
+                  <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-5 cursor-pointer">
                     {isExtractingStudent ? (
                       <>
                         <RotateCw className="w-4 h-4 mr-2 animate-spin" />
-                        <span>Carregando Respostas do PDF...</span>
+                        <span>Lendo PDF...</span>
                       </>
                     ) : (
                       <>
@@ -554,62 +603,44 @@ export default function EnviarSimuladoPage() {
                 </div>
               )}
 
+              {/* Colar Texto opcional */}
               {studentInputMode === "TEXT" && (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <textarea
-                    rows={7}
-                    placeholder={"01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C\n08-B\n09-D\n10-E..."}
+                    rows={6}
+                    placeholder={"01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C..."}
                     value={studentText}
                     onChange={(e) => setStudentText(e.target.value)}
-                    className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs sm:text-sm focus:border-indigo-500 focus:outline-none custom-scrollbar"
+                    className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs focus:border-indigo-500 focus:outline-none"
                   />
-                  <div className="flex justify-end">
-                    <Button
-                      variant="primary"
-                      size="lg"
-                      onClick={handleStudentTextParse}
-                      disabled={isExtractingStudent}
-                      className="gap-2 text-xs font-bold"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>Carregar Respostas na Grade</span>
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {studentInputMode === "GRID" && (
-                <div className="text-center py-6 space-y-4">
                   <Button
-                    variant="glow"
-                    size="lg"
-                    onClick={() => setStudentAnswers(buildInitialGrid())}
-                    className="text-xs font-bold gap-2"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleStudentTextParse}
+                    disabled={isExtractingStudent}
+                    className="text-xs"
                   >
-                    <FileCode className="w-4 h-4" />
-                    <span>Abrir Grade de {totalQuestionsCount} Questões</span>
+                    Processar Texto
                   </Button>
                 </div>
               )}
             </div>
           ) : (
-            /* Grade das Respostas do Aluno */
+            /* Grade Dinâmica das Questões Selecionadas */
             <div className="space-y-6 animate-in fade-in-50">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
                 <div>
                   <div className="flex items-center gap-2">
                     <Badge variant="success" className="text-xs font-bold">
-                      {studentAnswers.length} Questões Marcadas
+                      {studentAnswers.length} Questões (Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")})
                     </Badge>
-                    <span className="text-xs text-slate-400">
-                      Caderno: {examDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}
-                    </span>
+                    <span className="text-xs text-slate-400">Suas Respostas Marcadas</span>
                   </div>
                   <h3 className="text-lg font-bold text-white mt-1">
-                    Confira as Alternativas que você marcou na Prova
+                    Confira ou ajuste suas alternativas
                   </h3>
                   <p className="text-xs text-slate-300">
-                    Toque em qualquer letra para ajustar se necessário antes de avançar para o gabarito oficial.
+                    Toque na letra correspondente para cada uma das {studentAnswers.length} questões.
                   </p>
                 </div>
 
@@ -620,25 +651,25 @@ export default function EnviarSimuladoPage() {
                   className="text-xs gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Trocar Arquivo</span>
+                  <span>Alterar Quantidade</span>
                 </Button>
               </div>
 
-              {/* Grid das Questões */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5 max-h-[440px] overflow-y-auto custom-scrollbar pr-2">
+              {/* Grid das Questões com Rolagem Suave */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2.5 max-h-[440px] overflow-y-auto custom-scrollbar pr-2">
                 {studentAnswers.map((item) => {
                   const meta = getEnemQuestionMetadata(item.questionNumber);
                   return (
                     <div
                       key={item.questionNumber}
-                      className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center space-y-1.5 hover:border-indigo-500/40 transition-colors"
+                      className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center space-y-1.5 hover:border-indigo-500/40 transition-colors"
                     >
                       <div className="flex items-center justify-between w-full px-1">
                         <span className="text-[11px] font-bold text-slate-300">
                           Q{item.questionNumber.toString().padStart(2, "0")}
                         </span>
-                        <span className="text-[9px] text-slate-400 font-semibold truncate max-w-[42px]">
-                          {meta.area.replace("Ciências ", "").slice(0, 4)}
+                        <span className="text-[9px] text-slate-400 font-semibold truncate max-w-[55px]">
+                          {meta.area.replace("Ciências ", "").slice(0, 5)}
                         </span>
                       </div>
 
@@ -671,7 +702,7 @@ export default function EnviarSimuladoPage() {
                   onClick={() => setCurrentStep("OFFICIAL_KEY")}
                   className="gap-2 font-bold text-xs sm:text-sm"
                 >
-                  <span>Avançar para o Gabarito Oficial (Etapa 2)</span>
+                  <span>Avançar para o Gabarito Oficial ({studentAnswers.length} Qs)</span>
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -688,13 +719,13 @@ export default function EnviarSimuladoPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
             <div>
               <Badge variant="default" className="text-xs font-bold">
-                Etapa 2 de 2: Gabarito Oficial de Correção
+                Etapa 2: Gabarito Oficial de Correção
               </Badge>
               <h3 className="text-lg font-bold text-white mt-1">
                 Como deseja comparar suas {studentAnswers?.length} respostas?
               </h3>
               <p className="text-xs text-slate-300">
-                Escolha o gabarito oficial de referência para calcular seus acertos e nota TRI.
+                Escolha o gabarito oficial de referência para as questões Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")}.
               </p>
             </div>
 
@@ -728,7 +759,7 @@ export default function EnviarSimuladoPage() {
               </div>
               <span className="font-bold text-xs text-white block">Gabarito Oficial ENEM</span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                Utiliza a régua padrão do INEP para o {examDay === "DIA_1" ? "1º Dia" : "2º Dia"}.
+                Régua padrão oficial do INEP para essas {studentAnswers?.length} questões.
               </span>
             </button>
 
@@ -746,7 +777,7 @@ export default function EnviarSimuladoPage() {
               </div>
               <span className="font-bold text-xs text-white block">Enviar PDF do Gabarito</span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                Carregue o PDF de gabarito do SAS, Poliedro, Bernoulli, etc.
+                PDF oficial da sua apostila/simulado do cursinho.
               </span>
             </button>
 
@@ -762,9 +793,9 @@ export default function EnviarSimuladoPage() {
               <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white mb-2">
                 <Edit3 className="w-4 h-4" />
               </div>
-              <span className="font-bold text-xs text-white block">Colar Texto do Gabarito</span>
+              <span className="font-bold text-xs text-white block">Colar Gabarito em Texto</span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                Cole o gabarito oficial em formato 01-A, 02-B...
+                Cole em formato 01-A, 02-B...
               </span>
             </button>
           </div>
@@ -773,7 +804,7 @@ export default function EnviarSimuladoPage() {
           {officialKeyMode === "UPLOAD_PDF" && (
             <div className="p-6 border-dashed border-2 border-indigo-500/30 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 bg-slate-950/40">
               <h4 className="text-xs font-bold text-white">
-                {officialPdfName ? `Gabarito PDF: ${officialPdfName}` : "Selecione o PDF do Gabarito Oficial"}
+                {officialPdfName ? `Gabarito PDF: ${officialPdfName}` : `Selecione o PDF do Gabarito Oficial (${studentAnswers?.length} Qs)`}
               </h4>
               <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-5 cursor-pointer">
                 {isExtractingOfficial ? (
@@ -820,18 +851,17 @@ export default function EnviarSimuladoPage() {
             </div>
           )}
 
-          {/* Comparação Lado a Lado Preliminar */}
+          {/* Comparação Preliminar */}
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
             <span className="text-slate-300">
-              Pronto para comparar <strong>{studentAnswers?.length} questões</strong> com a matriz oficial de{" "}
-              <strong>{examDay === "DIA_1" ? "Linguagens e Humanas" : "Natureza e Matemática"}</strong>.
+              Pronto para corrigir as <strong>{studentAnswers?.length} questões</strong> (Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")}).
             </span>
           </div>
 
           {/* Botão Final de Disparo da Correção */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
             <span className="text-xs text-slate-400">
-              Ao clicar, o sistema fará a correção oficial e registrará as falhas no seu Banco de Erros.
+              Ao clicar, o sistema fará a correção e registrará as falhas no seu Banco de Erros.
             </span>
             <Button
               variant="primary"
@@ -848,7 +878,7 @@ export default function EnviarSimuladoPage() {
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>🎯 Realizar Correção e Gerar Diagnóstico TRI</span>
+                  <span>🎯 Realizar Correção ({studentAnswers?.length} Questões)</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -858,7 +888,7 @@ export default function EnviarSimuladoPage() {
       )}
 
       {/* =========================================================================
-          ETAPA 3: RELATÓRIO PÓS-CORREÇÃO COM APONTAMENTO DE CADA ERRO
+          ETAPA 3: RELATÓRIO PÓS-CORREÇÃO
           ========================================================================= */}
       {currentStep === "RESULT" && correctionSummary && (
         <Card className="p-6 sm:p-8 space-y-6 border-indigo-500/40 glow-indigo animate-in fade-in-50">
@@ -867,10 +897,10 @@ export default function EnviarSimuladoPage() {
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white">
-              Correção e Diagnóstico do {correctionSummary.dayLabel} Concluídos!
+              Correção de {correctionSummary.totalQuestions} Questões Concluída!
             </h2>
             <p className="text-xs text-slate-300">
-              O gabarito de {correctionSummary.totalQuestions} questões foi corrigido. As questões incorretas foram catalogadas com as disciplinas 100% corretas no Banco de Erros.
+              Intervalo corrigido: {correctionSummary.rangeLabel}. As questões incorretas foram catalogadas no Banco de Erros.
             </p>
           </div>
 
@@ -899,7 +929,7 @@ export default function EnviarSimuladoPage() {
             <div className="space-y-3 pt-2">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-400" />
-                Detalhamento dos Erros Catalogados (Disciplinas do {correctionSummary.dayLabel}):
+                Detalhamento dos Erros Catalogados ({correctionSummary.rangeLabel}):
               </h3>
               <div className="space-y-2.5 max-h-80 overflow-y-auto custom-scrollbar pr-1">
                 {correctionSummary.wrongItems.map((err) => (
