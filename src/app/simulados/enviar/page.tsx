@@ -24,6 +24,8 @@ import {
   Calendar,
   Layers,
   Languages,
+  XCircle,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -102,6 +104,7 @@ export default function EnviarSimuladoPage() {
     setStartQuestion(start);
     setEndQuestion(end);
     setStudentAnswers(null);
+    setOfficialAnswers(null);
   };
 
   const totalQuestionsCount = Math.max(1, endQuestion - startQuestion + 1);
@@ -122,6 +125,20 @@ export default function EnviarSimuladoPage() {
         questionNumber: q,
         alternative: existing || defaultAlts[(q - 1) % 5],
         confidence: existing ? 1.0 : 0.8,
+      });
+    }
+    return result;
+  };
+
+  // Monta a grade oficial padrão oficial do INEP para o intervalo
+  const buildOfficialDefaultGrid = (): ParsedGabaritoItem[] => {
+    const result: ParsedGabaritoItem[] = [];
+    for (let q = startQuestion; q <= endQuestion; q++) {
+      const meta = getEnemQuestionMetadata(q, foreignLang);
+      result.push({
+        questionNumber: q,
+        alternative: meta.officialKey,
+        confidence: 1.0,
       });
     }
     return result;
@@ -207,9 +224,12 @@ export default function EnviarSimuladoPage() {
 
       if (res.ok && data.data?.items && data.data.items.length > 0) {
         setOfficialAnswers(buildInitialGrid(data.data.items));
+      } else {
+        setOfficialAnswers(buildOfficialDefaultGrid());
       }
     } catch (err) {
       setIsExtractingOfficial(false);
+      setOfficialAnswers(buildOfficialDefaultGrid());
     }
   };
 
@@ -245,21 +265,31 @@ export default function EnviarSimuladoPage() {
     );
   };
 
+  const updateOfficialAnswer = (qNum: number, alt: "A" | "B" | "C" | "D" | "E") => {
+    if (!officialAnswers) return;
+    setOfficialAnswers(
+      officialAnswers.map((item) =>
+        item.questionNumber === qNum ? { ...item, alternative: alt } : item
+      )
+    );
+  };
+
+  // Ao avançar para a Etapa 2, garante que o Gabarito Oficial esteja inicializado
+  const handleProceedToOfficialStep = () => {
+    if (!officialAnswers) {
+      setOfficialAnswers(buildOfficialDefaultGrid());
+    }
+    setCurrentStep("OFFICIAL_KEY");
+  };
+
   // Executa a Correção Cruzando as Respostas do Aluno com o Gabarito Oficial
   const handleRunCorrection = async () => {
     if (!studentAnswers || studentAnswers.length === 0) return;
     setIsProcessingCorrection(true);
 
+    const activeOfficialList = officialAnswers || buildOfficialDefaultGrid();
     const officialMap = new Map<number, "A" | "B" | "C" | "D" | "E">();
-
-    if (officialAnswers && officialAnswers.length > 0) {
-      officialAnswers.forEach((o) => officialMap.set(o.questionNumber, o.alternative));
-    } else {
-      studentAnswers.forEach((s) => {
-        const meta = getEnemQuestionMetadata(s.questionNumber, foreignLang);
-        officialMap.set(s.questionNumber, meta.officialKey);
-      });
-    }
+    activeOfficialList.forEach((o) => officialMap.set(o.questionNumber, o.alternative));
 
     let correct = 0;
     let wrong = 0;
@@ -360,6 +390,26 @@ export default function EnviarSimuladoPage() {
 
   const includesForeignLang = startQuestion <= 5;
 
+  // Estatística em tempo real para a Etapa 2
+  const getLivePreviewStats = () => {
+    if (!studentAnswers) return { correct: 0, wrong: 0, total: 0 };
+    const currentOfficial = officialAnswers || buildOfficialDefaultGrid();
+    const map = new Map<number, string>();
+    currentOfficial.forEach((o) => map.set(o.questionNumber, o.alternative));
+
+    let c = 0;
+    studentAnswers.forEach((s) => {
+      if (s.alternative === map.get(s.questionNumber)) c++;
+    });
+    return {
+      correct: c,
+      wrong: studentAnswers.length - c,
+      total: studentAnswers.length,
+    };
+  };
+
+  const liveStats = getLivePreviewStats();
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -369,7 +419,7 @@ export default function EnviarSimuladoPage() {
           Envio de Gabarito & Correção
         </h1>
         <p className="text-sm text-slate-400">
-          Escolha o Dia do ENEM, sua opção de língua estrangeira (Inglês ou Espanhol) e a quantidade exata de questões para correção.
+          Escolha o Dia do ENEM, sua opção de língua estrangeira (Inglês ou Espanhol) e compare diretamente com o gabarito oficial.
         </p>
       </div>
 
@@ -390,7 +440,7 @@ export default function EnviarSimuladoPage() {
               currentStep === "STUDENT_ANSWERS" ? "text-white" : "text-slate-400"
             }`}
           >
-            Suas Respostas da Prova
+            1. Suas Respostas
           </span>
         </div>
 
@@ -413,7 +463,7 @@ export default function EnviarSimuladoPage() {
               currentStep === "OFFICIAL_KEY" ? "text-white" : "text-slate-400"
             }`}
           >
-            Gabarito Oficial
+            2. Gabarito Oficial
           </span>
         </div>
 
@@ -434,7 +484,7 @@ export default function EnviarSimuladoPage() {
               currentStep === "RESULT" ? "text-white" : "text-slate-400"
             }`}
           >
-            Relatório TRI & Erros
+            3. Relatório TRI & Erros
           </span>
         </div>
       </div>
@@ -520,7 +570,7 @@ export default function EnviarSimuladoPage() {
             </div>
           </div>
 
-          {/* 2. SELETOR DE LÍNGUA ESTRANGEIRA (INGLÊS OU ESPANHOL) SE A PROVA INCLUIR QUESTÕES 1 A 5 */}
+          {/* 2. SELETOR DE LÍNGUA ESTRANGEIRA (INGLÊS OU ESPANHOL) */}
           {includesForeignLang && (
             <div className="space-y-2 pt-3 border-t border-slate-800">
               <label className="text-xs font-bold text-slate-300 flex items-center gap-2">
@@ -531,7 +581,10 @@ export default function EnviarSimuladoPage() {
               <div className="grid grid-cols-2 gap-3 max-w-md">
                 <button
                   type="button"
-                  onClick={() => setForeignLang("INGLES")}
+                  onClick={() => {
+                    setForeignLang("INGLES");
+                    setOfficialAnswers(null);
+                  }}
                   className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
                     foreignLang === "INGLES"
                       ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
@@ -547,7 +600,10 @@ export default function EnviarSimuladoPage() {
 
                 <button
                   type="button"
-                  onClick={() => setForeignLang("ESPANHOL")}
+                  onClick={() => {
+                    setForeignLang("ESPANHOL");
+                    setOfficialAnswers(null);
+                  }}
                   className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
                     foreignLang === "ESPANHOL"
                       ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
@@ -750,6 +806,7 @@ export default function EnviarSimuladoPage() {
                     setStartQuestion(val);
                     if (val > endQuestion) setEndQuestion(val + 5);
                     setStudentAnswers(null);
+                    setOfficialAnswers(null);
                   }}
                   className="w-16 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold text-center focus:border-indigo-500 focus:outline-none"
                 />
@@ -766,6 +823,7 @@ export default function EnviarSimuladoPage() {
                     const val = Math.min(180, parseInt(e.target.value) || startQuestion);
                     setEndQuestion(Math.max(startQuestion, val));
                     setStudentAnswers(null);
+                    setOfficialAnswers(null);
                   }}
                   className="w-16 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold text-center focus:border-indigo-500 focus:outline-none"
                 />
@@ -892,7 +950,10 @@ export default function EnviarSimuladoPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setStudentAnswers(null)}
+                  onClick={() => {
+                    setStudentAnswers(null);
+                    setOfficialAnswers(null);
+                  }}
                   className="text-xs gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -954,7 +1015,7 @@ export default function EnviarSimuladoPage() {
                 <Button
                   variant="primary"
                   size="lg"
-                  onClick={() => setCurrentStep("OFFICIAL_KEY")}
+                  onClick={handleProceedToOfficialStep}
                   className="gap-2 font-bold text-xs sm:text-sm"
                 >
                   <span>Avançar para o Gabarito Oficial ({studentAnswers.length} Qs)</span>
@@ -967,9 +1028,9 @@ export default function EnviarSimuladoPage() {
       )}
 
       {/* =========================================================================
-          ETAPA 2: GABARITO OFICIAL DA PROVA PARA COMPARAÇÃO
+          ETAPA 2: GABARITO OFICIAL DA PROVA E COMPARADOR TRANSPARENTE
           ========================================================================= */}
-      {currentStep === "OFFICIAL_KEY" && (
+      {currentStep === "OFFICIAL_KEY" && studentAnswers && (
         <Card className="p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
             <div>
@@ -977,17 +1038,15 @@ export default function EnviarSimuladoPage() {
                 <Badge variant="default" className="text-xs font-bold">
                   Etapa 2: Gabarito Oficial de Correção
                 </Badge>
-                {includesForeignLang && (
-                  <Badge variant="outline" className="text-xs text-indigo-300 border-indigo-500/30">
-                    Língua Estrangeira: {foreignLang === "INGLES" ? "🇬🇧 Inglês" : "🇪🇸 Espanhol"}
-                  </Badge>
-                )}
+                <Badge variant="outline" className="text-xs text-indigo-300 border-indigo-500/30">
+                  {studentAnswers.length} Questões (Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")})
+                </Badge>
               </div>
               <h3 className="text-lg font-bold text-white mt-1">
-                Como deseja comparar suas {studentAnswers?.length} respostas?
+                Revise ou ajuste o Gabarito Oficial de referência
               </h3>
               <p className="text-xs text-slate-300">
-                Escolha o gabarito oficial de referência para as questões Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")}.
+                Você pode carregar o PDF oficial, colar o texto ou ajustar diretamente as letras corretas abaixo.
               </p>
             </div>
 
@@ -1002,82 +1061,82 @@ export default function EnviarSimuladoPage() {
             </Button>
           </div>
 
-          {/* Opções de Gabarito Oficial */}
+          {/* Opções Rápidas de Gabarito Oficial */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               type="button"
               onClick={() => {
                 setOfficialKeyMode("DEFAULT_ENEM");
-                setOfficialAnswers(null);
+                setOfficialAnswers(buildOfficialDefaultGrid());
               }}
-              className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
+              className={`p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
                 officialKeyMode === "DEFAULT_ENEM"
                   ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
                   : "bg-slate-900 border-slate-800 hover:border-slate-700"
               }`}
             >
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white mb-2">
-                <FileBadge className="w-4 h-4" />
+              <div className="flex items-center gap-2 mb-1">
+                <FileBadge className="w-4 h-4 text-indigo-400" />
+                <span className="font-bold text-xs text-white">Gabarito Padrão ENEM</span>
               </div>
-              <span className="font-bold text-xs text-white block">Gabarito Oficial ENEM</span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
-                Régua padrão do INEP (com {foreignLang === "INGLES" ? "Inglês" : "Espanhol"}).
+              <span className="text-[10px] text-slate-400 block">
+                Matriz oficial calibrada para essas {studentAnswers.length} questões.
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => setOfficialKeyMode("UPLOAD_PDF")}
-              className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
+              className={`p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
                 officialKeyMode === "UPLOAD_PDF"
                   ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
                   : "bg-slate-900 border-slate-800 hover:border-slate-700"
               }`}
             >
-              <div className="w-8 h-8 rounded-xl bg-purple-600 flex items-center justify-center text-white mb-2">
-                <FileText className="w-4 h-4" />
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-4 h-4 text-purple-400" />
+                <span className="font-bold text-xs text-white">Carregar PDF Oficial</span>
               </div>
-              <span className="font-bold text-xs text-white block">Enviar PDF do Gabarito</span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
-                PDF oficial da sua apostila/simulado do cursinho.
+              <span className="text-[10px] text-slate-400 block">
+                Extrair gabarito direto do PDF do seu simulado/cursinho.
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => setOfficialKeyMode("PASTE_TEXT")}
-              className={`p-4 rounded-2xl text-left border transition-all cursor-pointer ${
+              className={`p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
                 officialKeyMode === "PASTE_TEXT"
                   ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
                   : "bg-slate-900 border-slate-800 hover:border-slate-700"
               }`}
             >
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white mb-2">
-                <Edit3 className="w-4 h-4" />
+              <div className="flex items-center gap-2 mb-1">
+                <Edit3 className="w-4 h-4 text-emerald-400" />
+                <span className="font-bold text-xs text-white">Colar Texto do Gabarito</span>
               </div>
-              <span className="font-bold text-xs text-white block">Colar Gabarito em Texto</span>
-              <span className="text-[10px] text-slate-400 block mt-0.5">
-                Cole em formato 01-A, 02-B...
+              <span className="text-[10px] text-slate-400 block">
+                Cole o gabarito em formato 01-A, 02-B...
               </span>
             </button>
           </div>
 
           {/* Upload de PDF do Gabarito Oficial */}
           {officialKeyMode === "UPLOAD_PDF" && (
-            <div className="p-6 border-dashed border-2 border-indigo-500/30 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 bg-slate-950/40">
+            <div className="p-4 border-dashed border-2 border-indigo-500/30 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 bg-slate-950/40">
               <h4 className="text-xs font-bold text-white">
-                {officialPdfName ? `Gabarito PDF: ${officialPdfName}` : `Selecione o PDF do Gabarito Oficial (${studentAnswers?.length} Qs)`}
+                {officialPdfName ? `PDF Carregado: ${officialPdfName}` : `Selecione o PDF do Gabarito Oficial`}
               </h4>
-              <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-5 cursor-pointer">
+              <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white h-9 px-4 cursor-pointer">
                 {isExtractingOfficial ? (
                   <>
-                    <RotateCw className="w-4 h-4 mr-2 animate-spin" />
-                    <span>Lendo Gabarito Oficial...</span>
+                    <RotateCw className="w-3.5 h-3.5 mr-2 animate-spin" />
+                    <span>Processando PDF do Gabarito...</span>
                   </>
                 ) : (
                   <>
-                    <UploadCloud className="w-4 h-4 mr-2" />
-                    <span>Escolher PDF do Gabarito Oficial</span>
+                    <UploadCloud className="w-3.5 h-3.5 mr-2" />
+                    <span>Escolher Arquivo PDF</span>
                   </>
                 )}
                 <input
@@ -1093,13 +1152,13 @@ export default function EnviarSimuladoPage() {
 
           {/* Colar Texto do Gabarito Oficial */}
           {officialKeyMode === "PASTE_TEXT" && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <textarea
-                rows={5}
+                rows={3}
                 placeholder={"01-A\n02-B\n03-C..."}
                 value={officialText}
                 onChange={(e) => setOfficialText(e.target.value)}
-                className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs focus:border-indigo-500 focus:outline-none"
+                className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs focus:border-indigo-500 focus:outline-none"
               />
               <Button
                 variant="outline"
@@ -1108,24 +1167,94 @@ export default function EnviarSimuladoPage() {
                 disabled={isExtractingOfficial}
                 className="text-xs"
               >
-                Processar Texto do Gabarito
+                Aplicar Texto ao Gabarito
               </Button>
             </div>
           )}
 
-          {/* Comparação Preliminar */}
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
-            <span className="text-slate-300">
-              Pronto para corrigir as <strong>{studentAnswers?.length} questões</strong> do{" "}
-              <strong>{selectedDay === "DIA_1" ? "1º Dia" : "2º Dia"}</strong>
-              {includesForeignLang && <span> com opção de Língua Estrangeira: <strong>{foreignLang === "INGLES" ? "Inglês" : "Espanhol"}</strong></span>}.
-            </span>
+          {/* Grade Interativa do Gabarito Oficial com Comparação em Tempo Real */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                <Eye className="w-4 h-4 text-indigo-400" />
+                <span>Gabarito Oficial para as {studentAnswers.length} Questões:</span>
+              </label>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-emerald-400 font-bold">✓ {liveStats.correct} Acertos</span>
+                <span className="text-rose-400 font-bold">✕ {liveStats.wrong} Erros</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[380px] overflow-y-auto custom-scrollbar pr-2">
+              {(officialAnswers || buildOfficialDefaultGrid()).map((officialItem) => {
+                const sItem = studentAnswers.find((s) => s.questionNumber === officialItem.questionNumber);
+                const userAlt = sItem?.alternative || "-";
+                const isMatch = userAlt === officialItem.alternative;
+                const meta = getEnemQuestionMetadata(officialItem.questionNumber, foreignLang);
+
+                return (
+                  <div
+                    key={officialItem.questionNumber}
+                    className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 transition-all ${
+                      isMatch
+                        ? "bg-emerald-950/20 border-emerald-500/40"
+                        : "bg-rose-950/20 border-rose-500/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-white">
+                        Q{officialItem.questionNumber.toString().padStart(2, "0")}
+                      </span>
+                      <Badge
+                        variant={isMatch ? "success" : "destructive"}
+                        className="text-[10px] font-bold px-1.5 py-0"
+                      >
+                        {isMatch ? "Correto" : "Incorreto"}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs bg-slate-900/80 p-1.5 rounded-lg">
+                      <div className="text-[11px]">
+                        <span className="text-slate-400 block text-[9px]">Sua Resposta:</span>
+                        <span className={`font-black ${isMatch ? "text-emerald-400" : "text-rose-400"}`}>
+                          {userAlt}
+                        </span>
+                      </div>
+                      <div className="text-right text-[11px]">
+                        <span className="text-slate-400 block text-[9px]">Gabarito:</span>
+                        <span className="font-black text-white">
+                          {officialItem.alternative}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Botões para ajustar o gabarito oficial com 1 clique */}
+                    <div className="flex gap-1 justify-center pt-1 border-t border-slate-800">
+                      {(["A", "B", "C", "D", "E"] as const).map((alt) => (
+                        <button
+                          key={alt}
+                          type="button"
+                          onClick={() => updateOfficialAnswer(officialItem.questionNumber, alt)}
+                          className={`w-5 h-5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            officialItem.alternative === alt
+                              ? "bg-white text-slate-950 shadow-sm font-black"
+                              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+                          }`}
+                        >
+                          {alt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Botão Final de Disparo da Correção */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
             <span className="text-xs text-slate-400">
-              Ao clicar, o sistema fará a correção e registrará as falhas no seu Banco de Erros.
+              Pronto para gerar o relatório pedagógico e catalogar as falhas no Banco de Erros.
             </span>
             <Button
               variant="primary"
@@ -1142,7 +1271,7 @@ export default function EnviarSimuladoPage() {
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>🎯 Realizar Correção ({studentAnswers?.length} Questões)</span>
+                  <span>🎯 Confirmar e Salvar Correção ({studentAnswers.length} Questões)</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
