@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const syncProfileFromServer = async (email: string) => {
     try {
-      const res = await fetch(`/api/auth/profile?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`/api/auth/profile?email=${encodeURIComponent(email.trim().toLowerCase())}`);
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {
-      // Falha de rede silenciosa
+      // Fallback silencioso
     }
   };
 
@@ -138,7 +138,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (stored) {
         const parsed: UserProfile = JSON.parse(stored);
         setUser(parsed);
-        // Se for uma conta real, busca imediatamente a versão mais recente do servidor (ex: salva no celular)
         if (!parsed.isDemo && parsed.email) {
           syncProfileFromServer(parsed.email);
         }
@@ -150,6 +149,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
+
+    // Auto sincronização quando a janela do navegador ganha foco (ao trocar do celular pro PC)
+    const handleFocus = () => {
+      const activeStored = localStorage.getItem("studyontop_user");
+      if (activeStored) {
+        try {
+          const parsed: UserProfile = JSON.parse(activeStored);
+          if (!parsed.isDemo && parsed.email) {
+            syncProfileFromServer(parsed.email);
+          }
+        } catch (e) {}
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
   }, []);
 
   const refreshProfile = async () => {
@@ -222,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
-  const updateProfile = async (updates: Partial<UserProfile>) => {
+  const updateProfile = async (updates: Partial<UserProfile>): Promise<{ success: boolean; error?: string }> => {
     if (!user) return { success: false, error: "Usuário não autenticado" };
 
     const payload = {
@@ -230,7 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...updates,
     };
 
-    // Atualização otimista local
+    // Atualização otimista imediata no cliente
     const optimistic = { ...user, ...updates };
     setUser(optimistic);
     localStorage.setItem("studyontop_user", JSON.stringify(optimistic));
@@ -250,7 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { success: true };
         }
       }
-      return { success: true }; // Otimista manteve
+      return { success: true };
     } catch (e) {
       return { success: true };
     }

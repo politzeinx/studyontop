@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, User, Sliders, CheckCircle2 } from "lucide-react";
+import { Settings, User, Sliders, CheckCircle2, X, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -21,6 +21,7 @@ export default function ConfiguracoesPage() {
   const [targetScore, setTargetScore] = useState(user?.targetScore || 765);
   const [studyHoursPerDay, setStudyHoursPerDay] = useState(user?.studyHoursPerDay || 3);
   const [studyDaysPerWeek, setStudyDaysPerWeek] = useState(user?.studyDaysPerWeek || 7);
+  const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
@@ -46,9 +47,12 @@ export default function ConfiguracoesPage() {
     setTargetScore(estimateSisuCutoffScore(targetCourse, newQuota));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile({
+    setIsSaving(true);
+    setIsSaved(false);
+
+    await updateProfile({
       name,
       targetCourse,
       targetCollege,
@@ -57,26 +61,47 @@ export default function ConfiguracoesPage() {
       studyHoursPerDay,
       studyDaysPerWeek,
     });
+
+    setIsSaving(false);
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+
+    // Auto esconde a notificação após 4 segundos
+    setTimeout(() => setIsSaved(false), 4000);
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
           <Settings className="w-6 h-6 text-indigo-400" />
           Configurações da Conta & Preferências
         </h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-xs sm:text-sm text-slate-400">
           Personalize seu objetivo ENEM, modalidade de cotas, horas de estudo diárias e nota de corte
         </p>
       </div>
 
+      {/* Floating Toast Notification visível em Celular e Desktop */}
       {isSaved && (
-        <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in-50">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>Configurações salvas e cronograma recalculado com sucesso!</span>
+        <div className="fixed bottom-20 lg:bottom-8 right-4 left-4 sm:left-auto sm:w-96 z-50 p-4 rounded-2xl bg-emerald-600 text-white shadow-2xl flex items-center justify-between gap-3 animate-in slide-in-from-bottom-5 duration-300 border border-emerald-400/40">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="font-bold text-xs sm:text-sm">Configurações Salvas!</p>
+              <p className="text-[11px] text-emerald-100">
+                Sincronizado com sucesso no PC e no Celular.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSaved(false)}
+            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-emerald-700/50 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -92,6 +117,7 @@ export default function ConfiguracoesPage() {
               <label className="text-slate-400 block mb-1 font-semibold">Seu Nome</label>
               <input
                 type="text"
+                required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:border-indigo-500 focus:outline-none"
@@ -101,6 +127,7 @@ export default function ConfiguracoesPage() {
               <label className="text-slate-400 block mb-1 font-semibold">Curso Desejado</label>
               <input
                 type="text"
+                required
                 value={targetCourse}
                 onChange={(e) => handleCourseChange(e.target.value)}
                 className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:border-indigo-500 focus:outline-none"
@@ -110,6 +137,7 @@ export default function ConfiguracoesPage() {
               <label className="text-slate-400 block mb-1 font-semibold">Universidade Alvo</label>
               <input
                 type="text"
+                required
                 value={targetCollege}
                 onChange={(e) => setTargetCollege(e.target.value)}
                 className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:border-indigo-500 focus:outline-none"
@@ -184,8 +212,24 @@ export default function ConfiguracoesPage() {
             </div>
           </div>
 
-          <Button type="submit" variant="primary" size="default" className="w-full mt-4">
-            Salvar Todas as Configurações
+          <Button
+            type="submit"
+            variant="primary"
+            size="default"
+            disabled={isSaving}
+            className="w-full mt-4 gap-2"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Salvando no Servidor...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Salvar Todas as Configurações</span>
+              </>
+            )}
           </Button>
         </Card>
       </form>

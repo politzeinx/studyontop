@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "E-mail não fornecido" }, { status: 400 });
     }
 
-    const user = findUserByEmail(email);
+    const user = findUserByEmail(email.trim().toLowerCase());
     if (!user) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
@@ -39,26 +39,36 @@ export async function POST(req: NextRequest) {
       currentTriScore,
     } = body;
 
-    if (!email) {
+    if (!email || !email.trim()) {
       return NextResponse.json({ error: "E-mail obrigatório para atualizar perfil" }, { status: 400 });
     }
 
-    const existing = findUserByEmail(email);
-    if (!existing) {
-      return NextResponse.json({ error: "Usuário não encontrado no servidor" }, { status: 404 });
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    let existing = findUserByEmail(cleanEmail);
+
+    const calculatedScore =
+      targetScore ||
+      (targetCourse || quotaType
+        ? estimateSisuCutoffScore(
+            targetCourse || existing?.targetCourse || "Engenharia de Software",
+            (quotaType || existing?.quotaType || "AMPLA") as QuotaType
+          )
+        : existing?.targetScore || 765);
 
     const updatedUser: StoredUser = {
-      ...existing,
-      name: name ?? existing.name,
-      targetCourse: targetCourse ?? existing.targetCourse,
-      targetCollege: targetCollege ?? existing.targetCollege,
-      quotaType: (quotaType as QuotaType) ?? existing.quotaType,
-      targetScore: targetScore ?? (targetCourse || quotaType ? estimateSisuCutoffScore(targetCourse || existing.targetCourse, (quotaType || existing.quotaType) as QuotaType) : existing.targetScore),
-      studyHoursPerDay: studyHoursPerDay !== undefined ? Number(studyHoursPerDay) : existing.studyHoursPerDay,
-      studyDaysPerWeek: studyDaysPerWeek !== undefined ? Number(studyDaysPerWeek) : existing.studyDaysPerWeek,
-      streakDays: streakDays !== undefined ? Number(streakDays) : existing.streakDays,
-      currentTriScore: currentTriScore !== undefined ? Number(currentTriScore) : existing.currentTriScore,
+      id: existing?.id || `user-${Date.now()}`,
+      email: cleanEmail,
+      name: name ?? existing?.name ?? cleanEmail.split("@")[0],
+      targetCourse: targetCourse ?? existing?.targetCourse ?? "Engenharia de Software",
+      targetCollege: targetCollege ?? existing?.targetCollege ?? "USP",
+      quotaType: (quotaType as QuotaType) ?? existing?.quotaType ?? "AMPLA",
+      targetScore: Number(calculatedScore),
+      studyHoursPerDay: studyHoursPerDay !== undefined ? Number(studyHoursPerDay) : (existing?.studyHoursPerDay ?? 3),
+      studyDaysPerWeek: studyDaysPerWeek !== undefined ? Number(studyDaysPerWeek) : (existing?.studyDaysPerWeek ?? 7),
+      isDemo: false,
+      streakDays: streakDays !== undefined ? Number(streakDays) : (existing?.streakDays ?? 1),
+      currentTriScore: currentTriScore !== undefined ? Number(currentTriScore) : (existing?.currentTriScore ?? 500.0),
+      password: existing?.password || "",
     };
 
     saveUser(updatedUser);
