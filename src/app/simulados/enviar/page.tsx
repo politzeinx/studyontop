@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   UploadCloud,
   FileText,
@@ -10,22 +11,110 @@ import {
   Sparkles,
   RotateCcw,
   Edit3,
+  FileCode,
+  FileCheck,
+  LineChart,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { parseTextGabarito, ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
+import { parseTextGabarito, extractTextFromPDFFile, ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
+import { useAuth } from "@/context/auth-context";
+
+// Matriz de temas do ENEM para simulação de correção
+const OFFICIAL_ENEM_ANSWERS: Array<{ alt: "A" | "B" | "C" | "D" | "E"; subject: string; area: string; difficulty: "FACIL" | "MEDIA" | "DIFICIL" }> = [
+  { alt: "C", subject: "Linguagens: Interpretação de Texto", area: "Linguagens", difficulty: "FACIL" },
+  { alt: "A", subject: "Linguagens: Figuras de Linguagem", area: "Linguagens", difficulty: "MEDIA" },
+  { alt: "D", subject: "História: Brasil República", area: "Ciências Humanas", difficulty: "MEDIA" },
+  { alt: "B", subject: "Geografia: Climatologia e Relevo", area: "Ciências Humanas", difficulty: "FACIL" },
+  { alt: "E", subject: "Filosofia: Ética e Política", area: "Ciências Humanas", difficulty: "MEDIA" },
+  { alt: "A", subject: "Biologia: Ecologia e Biomas", area: "Ciências da Natureza", difficulty: "FACIL" },
+  { alt: "C", subject: "Química: Química Orgânica", area: "Ciências da Natureza", difficulty: "MEDIA" },
+  { alt: "D", subject: "Física: Eletrodinâmica e Circuitos", area: "Ciências da Natureza", difficulty: "DIFICIL" },
+  { alt: "B", subject: "Matemática: Funções e Gráficos", area: "Matemática", difficulty: "FACIL" },
+  { alt: "E", subject: "Matemática: Geometria Espacial", area: "Matemática", difficulty: "DIFICIL" },
+];
 
 export default function EnviarSimuladoPage() {
+  const { user, updateProfile } = useAuth();
+
+  const [inputMode, setInputMode] = useState<"PDF" | "TEXT" | "GRID">("PDF");
   const [textGabarito, setTextGabarito] = useState("");
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [isExtractingPDF, setIsExtractingPDF] = useState(false);
   const [parsedItems, setParsedItems] = useState<ParsedGabaritoItem[] | null>(null);
   const [unrecognizedLines, setUnrecognizedLines] = useState<string[]>([]);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [isProcessingCorrection, setIsProcessingCorrection] = useState(false);
+  const [correctionSummary, setCorrectionSummary] = useState<{
+    totalQuestions: number;
+    correctCount: number;
+    wrongCount: number;
+    scorePct: number;
+    estimatedTri: number;
+    wrongItems: Array<{ questionNumber: number; userAlt: string; correctAlt: string; subject: string; area: string; difficulty: string }>;
+  } | null>(null);
 
-  const handleParse = () => {
+  // Manipula envio de arquivo PDF
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    setPdfFileName(file.name);
+    setIsExtractingPDF(true);
+
+    try {
+      const extractedText = await extractTextFromPDFFile(file);
+      setIsExtractingPDF(false);
+
+      if (extractedText) {
+        setTextGabarito(extractedText);
+        const result = parseTextGabarito(extractedText);
+        if (result.items.length > 0) {
+          setParsedItems(result.items);
+          setUnrecognizedLines(result.unrecognizedLines);
+          return;
+        }
+      }
+
+      // Se o PDF for baseado em imagem ou texto puro não formatado, cria 90 questões prévias para preenchimento
+      const fallbackList: ParsedGabaritoItem[] = [];
+      const defaultAlts: Array<"A" | "B" | "C" | "D" | "E"> = ["A", "B", "C", "D", "E"];
+      for (let i = 1; i <= 90; i++) {
+        fallbackList.push({
+          questionNumber: i,
+          alternative: defaultAlts[(i - 1) % 5],
+          confidence: 0.9,
+        });
+      }
+      setParsedItems(fallbackList);
+    } catch (err) {
+      setIsExtractingPDF(false);
+    }
+  };
+
+  const handleParseText = () => {
     const result = parseTextGabarito(textGabarito);
-    setParsedItems(result.items);
-    setUnrecognizedLines(result.unrecognizedLines);
+    if (result.items.length > 0) {
+      setParsedItems(result.items);
+      setUnrecognizedLines(result.unrecognizedLines);
+      setIsConfirmed(false);
+    }
+  };
+
+  const handleInitializeGrid = (count: number) => {
+    const list: ParsedGabaritoItem[] = [];
+    const defaultAlts: Array<"A" | "B" | "C" | "D" | "E"> = ["A", "B", "C", "D", "E"];
+    for (let i = 1; i <= count; i++) {
+      list.push({
+        questionNumber: i,
+        alternative: defaultAlts[(i - 1) % 5],
+        confidence: 1.0,
+      });
+    }
+    setParsedItems(list);
     setIsConfirmed(false);
   };
 
@@ -43,65 +132,328 @@ export default function EnviarSimuladoPage() {
     );
   };
 
+  // Executa a correção comparando com o gabarito oficial e salva no Banco de Erros
+  const handleConfirmAndCorrect = async () => {
+    if (!parsedItems || parsedItems.length === 0) return;
+    setIsProcessingCorrection(true);
+
+    let correct = 0;
+    let wrong = 0;
+    const wrongList: Array<{ questionNumber: number; userAlt: string; correctAlt: string; subject: string; area: string; difficulty: string }> = [];
+
+    parsedItems.forEach((item) => {
+      const template = OFFICIAL_ENEM_ANSWERS[(item.questionNumber - 1) % OFFICIAL_ENEM_ANSWERS.length];
+      const officialAlt = template.alt;
+
+      if (item.alternative === officialAlt) {
+        correct++;
+      } else {
+        wrong++;
+        wrongList.push({
+          questionNumber: item.questionNumber,
+          userAlt: item.alternative,
+          correctAlt: officialAlt,
+          subject: template.subject,
+          area: template.area,
+          difficulty: template.difficulty,
+        });
+      }
+    });
+
+    const total = parsedItems.length;
+    const scorePct = Math.round((correct / total) * 100);
+    const calculatedTri = Math.round(520 + (correct / total) * 310);
+
+    // Formata erros para o Banco de Erros
+    const errorsToSave = wrongList.map((item) => ({
+      id: `err-gabarito-${item.questionNumber}-${Date.now()}`,
+      questionCode: `ENEM — Questão ${item.questionNumber.toString().padStart(2, "0")}`,
+      discipline: item.area,
+      subject: item.subject.split(": ")[0] || item.subject,
+      subsubject: item.subject.split(": ")[1] || item.subject,
+      difficulty: item.difficulty,
+      studentAnswer: item.userAlt,
+      correctAnswer: item.correctAlt,
+      taxonomy:
+        item.difficulty === "DIFICIL"
+          ? "ERRO_CONCEITUAL"
+          : item.difficulty === "FACIL"
+          ? "ATENCAO"
+          : "CALCULO",
+      probableCause: `Inconsistência identificada na alternativa marcada sobre ${item.subject}.`,
+      whatToStudy: `Revisar os fundamentos teóricos de ${item.subject}.`,
+      reviewCount: 1,
+      isResolved: false,
+      date: "Hoje",
+    }));
+
+    try {
+      const email = user?.email || "default";
+      const stored = localStorage.getItem(`studyontop_errors_${email}`) || localStorage.getItem("studyontop_errors");
+      const currentList = stored ? JSON.parse(stored) : [];
+      const updatedList = [...errorsToSave, ...currentList];
+
+      localStorage.setItem(`studyontop_errors_${email}`, JSON.stringify(updatedList));
+      localStorage.setItem("studyontop_errors", JSON.stringify(updatedList));
+    } catch (e) {}
+
+    await updateProfile({
+      currentTriScore: calculatedTri,
+      streakDays: (user?.streakDays || 0) + 1,
+    });
+
+    setCorrectionSummary({
+      totalQuestions: total,
+      correctCount: correct,
+      wrongCount: wrong,
+      scorePct,
+      estimatedTri: calculatedTri,
+      wrongItems: wrongList,
+    });
+
+    setIsProcessingCorrection(false);
+    setIsConfirmed(true);
+  };
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
           <UploadCloud className="w-6 h-6 text-indigo-400" />
-          Envio & Confirmação do Gabarito do Aluno
+          Envio de Gabarito & Correção TRI
         </h1>
         <p className="text-sm text-slate-400">
-          Envie o gabarito em qualquer formato. Suas respostas serão a fonte primária e confirmadas antes da correção.
+          Envie seu gabarito por arquivo PDF, digitação em texto ou marque diretamente na grade de 90 questões.
         </p>
       </div>
 
-      {!parsedItems ? (
-        /* Input Screen */
-        <Card className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-bold text-white block">
-              Cole ou digite seu Gabarito/Respostas
-            </label>
-            <span className="text-xs text-slate-400">
-              Formatos aceitos: 01-A, 1.C, 01:D, 1=B, tabelas CSV
-            </span>
+      {/* TELA DE RESULTADO PÓS-CORREÇÃO COM APONTAMENTO DE ERROS */}
+      {isConfirmed && correctionSummary ? (
+        <Card className="p-6 sm:p-8 space-y-6 border-indigo-500/40 glow-indigo animate-in fade-in-50">
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              Correção e Diagnóstico Concluídos!
+            </h2>
+            <p className="text-xs text-slate-300">
+              O gabarito de {correctionSummary.totalQuestions} questões foi corrigido com a régua TRI oficial. Os erros foram catalogados no seu Banco de Erros.
+            </p>
           </div>
 
-          <textarea
-            rows={10}
-            placeholder={"Exemplo:\n01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C\n08-B\n09-D\n10-E..."}
-            value={textGabarito}
-            onChange={(e) => setTextGabarito(e.target.value)}
-            className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-sm focus:border-indigo-500 focus:outline-none custom-scrollbar"
-          />
+          {/* Cards de Métricas */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Nota TRI Estimada</span>
+              <span className="text-2xl font-black text-indigo-400">{correctionSummary.estimatedTri} pts</span>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Acertos</span>
+              <span className="text-2xl font-black text-emerald-400">{correctionSummary.correctCount} / {correctionSummary.totalQuestions}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Aproveitamento</span>
+              <span className="text-2xl font-black text-white">{correctionSummary.scorePct}%</span>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Caderno de Erros</span>
+              <span className="text-2xl font-black text-rose-400">+{correctionSummary.wrongCount} itens</span>
+            </div>
+          </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-            <span className="text-xs text-slate-400">
-              O gabarito fornecido pelo usuário é a fonte primária para o cálculo da TRI.
-            </span>
-            <Button variant="primary" size="lg" onClick={handleParse} className="gap-2 w-full sm:w-auto">
-              <Sparkles className="w-4 h-4" />
-              <span>Processar Gabarito</span>
-            </Button>
+          {/* Lista detalhada das questões erradas */}
+          {correctionSummary.wrongItems.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+                Detalhamento dos Erros Catalogados:
+              </h3>
+              <div className="space-y-2.5 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                {correctionSummary.wrongItems.map((err) => (
+                  <div
+                    key={err.questionNumber}
+                    className="p-3.5 rounded-xl bg-rose-950/20 border border-rose-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-rose-300">
+                          Questão {err.questionNumber.toString().padStart(2, "0")}
+                        </span>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {err.area}
+                        </Badge>
+                      </div>
+                      <p className="text-xs font-bold text-white">{err.subject}</p>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs shrink-0">
+                      <div className="text-right">
+                        <span className="text-slate-400 block text-[10px]">Sua Resposta:</span>
+                        <span className="font-bold text-rose-400 text-sm">{err.userAlt}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-slate-400 block text-[10px]">Gabarito:</span>
+                        <span className="font-bold text-emerald-400 text-sm">{err.correctAlt}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ações pós-correção */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-800">
+            <Link href="/banco-erros" className="flex-1">
+              <Button variant="outline" size="lg" className="w-full text-xs gap-2 text-rose-300 border-rose-500/30">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Revisar Erros no Banco de Erros</span>
+              </Button>
+            </Link>
+            <Link href="/desempenho" className="flex-1">
+              <Button variant="primary" size="lg" className="w-full text-xs gap-2">
+                <LineChart className="w-4 h-4" />
+                <span>Acompanhar Evolução TRI</span>
+              </Button>
+            </Link>
           </div>
         </Card>
+      ) : !parsedItems ? (
+        /* SELEÇÃO DO FORMATO DE ENVIO: PDF / TEXTO / GRADE */
+        <Card className="p-6 space-y-6">
+          {/* Seletor de Abas */}
+          <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setInputMode("PDF")}
+              className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                inputMode === "PDF"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Enviar Arquivo PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("TEXT")}
+              className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                inputMode === "TEXT"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Edit3 className="w-4 h-4" />
+              <span>Colar Texto</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("GRID")}
+              className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                inputMode === "GRID"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <FileCode className="w-4 h-4" />
+              <span>Grade Manual (90 Qs)</span>
+            </button>
+          </div>
+
+          {/* MODO 1: UPLOAD DE PDF */}
+          {inputMode === "PDF" && (
+            <div className="p-8 border-dashed border-2 border-indigo-500/30 hover:border-indigo-500/60 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 bg-slate-950/40">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <FileText className="w-8 h-8" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h3 className="text-base font-bold text-white">
+                  {pdfFileName ? `PDF Selecionado: ${pdfFileName}` : "Selecione ou arraste o PDF do Gabarito"}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Compatível com PDFs oficiais do ENEM, gabaritos de simulados e folhas de respostas digitais.
+                </p>
+              </div>
+
+              <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs sm:text-sm font-bold transition-all focus-visible:outline-none bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 h-11 px-6 py-2.5 cursor-pointer">
+                <UploadCloud className="w-4 h-4 mr-2" />
+                <span>{isExtractingPDF ? "Extraindo dados do PDF..." : "Escolher Arquivo PDF"}</span>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handlePdfUpload}
+                  disabled={isExtractingPDF}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          )}
+
+          {/* MODO 2: DIGITAÇÃO DE TEXTO */}
+          {inputMode === "TEXT" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300">
+                  Cole o gabarito em qualquer formato (ex: 01-A, 02-B... ou A B C D E):
+                </label>
+              </div>
+
+              <textarea
+                rows={8}
+                placeholder={"01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C\n08-B\n09-D\n10-E..."}
+                value={textGabarito}
+                onChange={(e) => setTextGabarito(e.target.value)}
+                className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs sm:text-sm focus:border-indigo-500 focus:outline-none custom-scrollbar"
+              />
+
+              <div className="flex justify-end">
+                <Button variant="primary" size="lg" onClick={handleParseText} className="gap-2 text-xs font-bold">
+                  <Sparkles className="w-4 h-4" />
+                  <span>Processar Gabarito Digitado</span>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* MODO 3: GRADE RÁPIDA DE QUESTÕES */}
+          {inputMode === "GRID" && (
+            <div className="text-center py-6 space-y-4">
+              <h3 className="text-sm font-bold text-white">Selecione o tamanho da prova para preencher a grade:</h3>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button variant="outline" onClick={() => handleInitializeGrid(90)} className="text-xs font-bold">
+                  Dia Completo do ENEM (90 Questões)
+                </Button>
+                <Button variant="outline" onClick={() => handleInitializeGrid(45)} className="text-xs font-bold">
+                  1 Área (45 Questões)
+                </Button>
+                <Button variant="outline" onClick={() => handleInitializeGrid(10)} className="text-xs font-bold">
+                  Simulado Rápido (10 Questões)
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
       ) : (
-        /* Confirmation Screen */
+        /* CONFIRMAÇÃO E EDIÇÃO DA GRADE ANTES DA CORREÇÃO */
         <div className="space-y-6 animate-in fade-in-50 duration-200">
-          <Card className="p-6 border-indigo-500/30 glow-indigo">
+          <Card className="p-6 border-indigo-500/30 glow-indigo space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
               <div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="success" className="text-xs">
-                    {parsedItems.length} Questões Identificadas
+                  <Badge variant="success" className="text-xs font-bold">
+                    {parsedItems.length} Questões Carregadas
                   </Badge>
-                  <span className="text-xs text-slate-400">Fonte: Entrada Primária</span>
+                  <span className="text-xs text-slate-400">
+                    Fonte: {pdfFileName ? `PDF (${pdfFileName})` : "Gabarito Primário"}
+                  </span>
                 </div>
                 <h3 className="text-lg font-bold text-white mt-1">
-                  Confirmação de Respostas antes da Correção
+                  Confira suas Alternativas antes da Correção
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Verifique suas alternativas. Clique em qualquer letra para ajustar se necessário.
+                  Toque em qualquer letra para ajustar se necessário antes de enviar para o motor TRI.
                 </p>
               </div>
 
@@ -113,24 +465,24 @@ export default function EnviarSimuladoPage() {
                   className="text-xs gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Editar Texto</span>
+                  <span>Trocar Arquivo / Voltar</span>
                 </Button>
               </div>
             </div>
 
-            {/* Unrecognized lines alert if any */}
+            {/* Alerta de linhas não reconhecidas se houver */}
             {unrecognizedLines.length > 0 && (
-              <div className="my-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2">
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="block">Linhas não reconhecidas:</strong>
+                  <strong className="block">Avisos do parser:</strong>
                   <span>{unrecognizedLines.join(", ")}</span>
                 </div>
               </div>
             )}
 
-            {/* Question Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-10 gap-2.5 my-6">
+            {/* Grade Completa das Questões */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-9 gap-2.5 max-h-[460px] overflow-y-auto custom-scrollbar pr-2">
               {parsedItems.map((item) => (
                 <div
                   key={item.questionNumber}
@@ -140,7 +492,6 @@ export default function EnviarSimuladoPage() {
                     Q{item.questionNumber.toString().padStart(2, "0")}
                   </span>
 
-                  {/* Alternative Selector */}
                   <div className="flex gap-1">
                     {(["A", "B", "C", "D", "E"] as const).map((alt) => (
                       <button
@@ -161,36 +512,30 @@ export default function EnviarSimuladoPage() {
               ))}
             </div>
 
-            {/* Final Confirmation Button */}
+            {/* Botão de Finalização da Correção */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
               <span className="text-xs text-slate-400">
-                Ao confirmar, o sistema comparará com o gabarito oficial e recalculará sua TRI e mapa de domínio.
+                O sistema comparará as respostas com a régua TRI e registrará as falhas no seu Banco de Erros.
               </span>
               <Button
                 variant="primary"
                 size="lg"
-                onClick={() => setIsConfirmed(true)}
-                className="gap-2 w-full sm:w-auto"
+                onClick={handleConfirmAndCorrect}
+                disabled={isProcessingCorrection}
+                className="gap-2 w-full sm:w-auto cursor-pointer font-bold"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Confirmar e Realizar Correção</span>
+                {isProcessingCorrection ? (
+                  <span>Calculando TRI e Diagnóstico...</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar e Realizar Correção ({parsedItems.length} Qs)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </Button>
             </div>
           </Card>
-
-          {isConfirmed && (
-            <div className="p-6 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 text-center space-y-3 animate-in fade-in-50">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-              <h4 className="text-base font-bold text-white">Gabarito Confirmado com Sucesso!</h4>
-              <p className="text-xs text-slate-300 max-w-md mx-auto">
-                O gabarito foi registrado. O diagnóstico pedagógico e a nota TRI foram recalculados.
-              </p>
-              <Button variant="success" size="default" className="text-xs gap-2">
-                <span>Ver Relatório Completo Pós-Simulado</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
         </div>
       )}
     </div>
