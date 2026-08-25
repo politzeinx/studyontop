@@ -17,6 +17,9 @@ import {
   BookOpen,
   RotateCw,
   HelpCircle,
+  Check,
+  ArrowLeft,
+  FileBadge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -26,18 +29,30 @@ import { useAuth } from "@/context/auth-context";
 import { getEnemQuestionMetadata, EnemQuestionMeta } from "@/lib/data/enem-official-matrix";
 
 type ExamDayMode = "DIA_1" | "DIA_2" | "AREA_45";
+type WizardStep = "STUDENT_ANSWERS" | "OFFICIAL_KEY" | "RESULT";
 
 export default function EnviarSimuladoPage() {
   const { user, updateProfile } = useAuth();
 
+  // Configuração do Simulado
   const [examDay, setExamDay] = useState<ExamDayMode>("DIA_1");
-  const [inputMode, setInputMode] = useState<"PDF" | "TEXT" | "GRID">("PDF");
-  const [textGabarito, setTextGabarito] = useState("");
-  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
-  const [isExtractingPDF, setIsExtractingPDF] = useState(false);
-  const [parsedItems, setParsedItems] = useState<ParsedGabaritoItem[] | null>(null);
-  const [unrecognizedLines, setUnrecognizedLines] = useState<string[]>([]);
-  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [currentStep, setCurrentStep] = useState<WizardStep>("STUDENT_ANSWERS");
+
+  // Etapa 1: Respostas do Aluno
+  const [studentInputMode, setStudentInputMode] = useState<"PDF" | "TEXT" | "GRID">("PDF");
+  const [studentPdfName, setStudentPdfName] = useState<string | null>(null);
+  const [studentText, setStudentText] = useState("");
+  const [studentAnswers, setStudentAnswers] = useState<ParsedGabaritoItem[] | null>(null);
+  const [isExtractingStudent, setIsExtractingStudent] = useState(false);
+
+  // Etapa 2: Gabarito Oficial da Prova
+  const [officialKeyMode, setOfficialKeyMode] = useState<"DEFAULT_ENEM" | "UPLOAD_PDF" | "PASTE_TEXT">("DEFAULT_ENEM");
+  const [officialPdfName, setOfficialPdfName] = useState<string | null>(null);
+  const [officialText, setOfficialText] = useState("");
+  const [officialAnswers, setOfficialAnswers] = useState<ParsedGabaritoItem[] | null>(null);
+  const [isExtractingOfficial, setIsExtractingOfficial] = useState(false);
+
+  // Etapa 3: Resultado da Correção
   const [isProcessingCorrection, setIsProcessingCorrection] = useState(false);
   const [correctionSummary, setCorrectionSummary] = useState<{
     totalQuestions: number;
@@ -46,14 +61,21 @@ export default function EnviarSimuladoPage() {
     scorePct: number;
     estimatedTri: number;
     dayLabel: string;
-    wrongItems: Array<{ questionNumber: number; userAlt: string; correctAlt: string; subject: string; area: string; difficulty: string }>;
+    wrongItems: Array<{
+      questionNumber: number;
+      userAlt: string;
+      correctAlt: string;
+      subject: string;
+      area: string;
+      difficulty: string;
+    }>;
   } | null>(null);
 
   const startQuestionNum = examDay === "DIA_2" ? 91 : 1;
   const totalQuestionsCount = examDay === "AREA_45" ? 45 : 90;
   const endQuestionNum = startQuestionNum + totalQuestionsCount - 1;
 
-  // Cria a grade vazia / inicializada com base no Dia selecionado
+  // Monta a grade de questões (1 a 90 ou 91 a 180)
   const buildInitialGrid = (existingItems?: ParsedGabaritoItem[]): ParsedGabaritoItem[] => {
     const map = new Map<number, "A" | "B" | "C" | "D" | "E">();
     if (existingItems) {
@@ -74,14 +96,14 @@ export default function EnviarSimuladoPage() {
     return result;
   };
 
-  // Upload e leitura do arquivo PDF
-  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Etapa 1: Upload do PDF com as respostas do aluno
+  const handleStudentPdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const file = files[0];
-    setPdfFileName(file.name);
-    setIsExtractingPDF(true);
+    setStudentPdfName(file.name);
+    setIsExtractingStudent(true);
 
     try {
       const formData = new FormData();
@@ -94,79 +116,152 @@ export default function EnviarSimuladoPage() {
       });
 
       const data = await res.json();
-      setIsExtractingPDF(false);
+      setIsExtractingStudent(false);
 
       if (res.ok && data.data?.items && data.data.items.length > 0) {
-        const grid = buildInitialGrid(data.data.items);
-        setParsedItems(grid);
-        setUnrecognizedLines(data.data.unrecognizedLines || []);
+        setStudentAnswers(buildInitialGrid(data.data.items));
       } else {
-        setParsedItems(buildInitialGrid());
+        setStudentAnswers(buildInitialGrid());
       }
     } catch (err) {
-      setIsExtractingPDF(false);
-      setParsedItems(buildInitialGrid());
+      setIsExtractingStudent(false);
+      setStudentAnswers(buildInitialGrid());
     }
   };
 
-  const handleParseText = async () => {
-    if (!textGabarito.trim()) return;
-    setIsExtractingPDF(true);
+  // Etapa 1: Processar texto digitado pelo aluno
+  const handleStudentTextParse = async () => {
+    if (!studentText.trim()) return;
+    setIsExtractingStudent(true);
 
     try {
       const res = await fetch("/api/gabarito/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: textGabarito, targetCount: totalQuestionsCount }),
+        body: JSON.stringify({ rawText: studentText, targetCount: totalQuestionsCount }),
       });
 
       const data = await res.json();
-      setIsExtractingPDF(false);
+      setIsExtractingStudent(false);
 
       if (res.ok && data.data?.items) {
-        setParsedItems(buildInitialGrid(data.data.items));
-        setUnrecognizedLines(data.data.unrecognizedLines || []);
-        setIsConfirmed(false);
+        setStudentAnswers(buildInitialGrid(data.data.items));
       }
     } catch (e) {
-      setIsExtractingPDF(false);
+      setIsExtractingStudent(false);
     }
   };
 
-  const handleUpdateAlternative = (
-    questionNumber: number,
-    newAlternative: "A" | "B" | "C" | "D" | "E"
-  ) => {
-    if (!parsedItems) return;
-    setParsedItems(
-      parsedItems.map((item) =>
-        item.questionNumber === questionNumber
-          ? { ...item, alternative: newAlternative }
-          : item
+  // Etapa 2: Upload do PDF do Gabarito Oficial
+  const handleOfficialPdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    setOfficialPdfName(file.name);
+    setIsExtractingOfficial(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("targetCount", totalQuestionsCount.toString());
+
+      const res = await fetch("/api/gabarito/parse", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      setIsExtractingOfficial(false);
+
+      if (res.ok && data.data?.items && data.data.items.length > 0) {
+        setOfficialAnswers(buildInitialGrid(data.data.items));
+      }
+    } catch (err) {
+      setIsExtractingOfficial(false);
+    }
+  };
+
+  // Etapa 2: Processar texto do Gabarito Oficial
+  const handleOfficialTextParse = async () => {
+    if (!officialText.trim()) return;
+    setIsExtractingOfficial(true);
+
+    try {
+      const res = await fetch("/api/gabarito/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: officialText, targetCount: totalQuestionsCount }),
+      });
+
+      const data = await res.json();
+      setIsExtractingOfficial(false);
+
+      if (res.ok && data.data?.items) {
+        setOfficialAnswers(buildInitialGrid(data.data.items));
+      }
+    } catch (e) {
+      setIsExtractingOfficial(false);
+    }
+  };
+
+  const updateStudentAnswer = (qNum: number, alt: "A" | "B" | "C" | "D" | "E") => {
+    if (!studentAnswers) return;
+    setStudentAnswers(
+      studentAnswers.map((item) =>
+        item.questionNumber === qNum ? { ...item, alternative: alt } : item
       )
     );
   };
 
-  // Correção oficial utilizando a matriz rigorosa do ENEM
-  const handleConfirmAndCorrect = async () => {
-    if (!parsedItems || parsedItems.length === 0) return;
+  const updateOfficialAnswer = (qNum: number, alt: "A" | "B" | "C" | "D" | "E") => {
+    if (!officialAnswers) return;
+    setOfficialAnswers(
+      officialAnswers.map((item) =>
+        item.questionNumber === qNum ? { ...item, alternative: alt } : item
+      )
+    );
+  };
+
+  // Executa a Correção Cruzando as Respostas do Aluno (Etapa 1) com o Gabarito Oficial (Etapa 2)
+  const handleRunCorrection = async () => {
+    if (!studentAnswers || studentAnswers.length === 0) return;
     setIsProcessingCorrection(true);
+
+    const officialMap = new Map<number, "A" | "B" | "C" | "D" | "E">();
+
+    if (officialAnswers && officialAnswers.length > 0) {
+      officialAnswers.forEach((o) => officialMap.set(o.questionNumber, o.alternative));
+    } else {
+      // Se usar o padrão oficial da matriz
+      studentAnswers.forEach((s) => {
+        const meta = getEnemQuestionMetadata(s.questionNumber);
+        officialMap.set(s.questionNumber, meta.officialKey);
+      });
+    }
 
     let correct = 0;
     let wrong = 0;
-    const wrongList: Array<{ questionNumber: number; userAlt: string; correctAlt: string; subject: string; area: string; difficulty: string }> = [];
+    const wrongList: Array<{
+      questionNumber: number;
+      userAlt: string;
+      correctAlt: string;
+      subject: string;
+      area: string;
+      difficulty: string;
+    }> = [];
 
-    parsedItems.forEach((item) => {
-      const meta: EnemQuestionMeta = getEnemQuestionMetadata(item.questionNumber);
-      const officialAlt = meta.officialKey;
+    studentAnswers.forEach((sItem) => {
+      const meta = getEnemQuestionMetadata(sItem.questionNumber);
+      const officialAlt = officialMap.get(sItem.questionNumber) || meta.officialKey;
 
-      if (item.alternative === officialAlt) {
+      if (sItem.alternative === officialAlt) {
         correct++;
       } else {
         wrong++;
         wrongList.push({
-          questionNumber: item.questionNumber,
-          userAlt: item.alternative,
+          questionNumber: sItem.questionNumber,
+          userAlt: sItem.alternative,
           correctAlt: officialAlt,
           subject: meta.subject,
           area: meta.area,
@@ -175,11 +270,11 @@ export default function EnviarSimuladoPage() {
       }
     });
 
-    const total = parsedItems.length;
+    const total = studentAnswers.length;
     const scorePct = Math.round((correct / total) * 100);
     const calculatedTri = Math.round(520 + (correct / total) * 310);
 
-    // Formata os erros com as disciplinas e matérias 100% corretas do ENEM
+    // Salva os erros no Banco de Erros
     const errorsToSave = wrongList.map((item) => ({
       id: `err-gabarito-${item.questionNumber}-${Date.now()}`,
       questionCode: `ENEM — Questão ${item.questionNumber.toString().padStart(2, "0")}`,
@@ -195,8 +290,8 @@ export default function EnviarSimuladoPage() {
           : item.difficulty === "FACIL"
           ? "ATENCAO"
           : "CALCULO",
-      probableCause: `Inconsistência na resolução da questão de ${item.subject}.`,
-      whatToStudy: `Revisar os tópicos essenciais de ${item.subject} e resolver exercícios focados.`,
+      probableCause: `Inconsistência identificada na questão de ${item.subject}.`,
+      whatToStudy: `Revisar os tópicos essenciais de ${item.subject}.`,
       reviewCount: 1,
       isResolved: false,
       date: "Hoje",
@@ -219,9 +314,9 @@ export default function EnviarSimuladoPage() {
 
     const dayLabel =
       examDay === "DIA_1"
-        ? "1º Dia (Linguagens e Ciências Humanas)"
+        ? "1º Dia (Linguagens e Humanas)"
         : examDay === "DIA_2"
-        ? "2º Dia (Ciências da Natureza e Matemática)"
+        ? "2º Dia (Natureza e Matemática)"
         : "Simulado 45 Questões";
 
     setCorrectionSummary({
@@ -235,7 +330,7 @@ export default function EnviarSimuladoPage() {
     });
 
     setIsProcessingCorrection(false);
-    setIsConfirmed(true);
+    setCurrentStep("RESULT");
   };
 
   return (
@@ -244,15 +339,528 @@ export default function EnviarSimuladoPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
           <UploadCloud className="w-6 h-6 text-indigo-400" />
-          Envio de Gabarito & Correção TRI
+          Envio de Gabarito & Correção em 2 Etapas
         </h1>
         <p className="text-sm text-slate-400">
-          Envie o gabarito oficial ou respostas do 1º ou 2º dia do ENEM para correção pedagógica e catálogo de erros.
+          Envie primeiro as questões que você marcou na prova e em seguida o gabarito oficial para comparação precisa.
         </p>
       </div>
 
-      {/* TELA DE RESULTADO PÓS-CORREÇÃO COM APONTAMENTO DE ERROS RIGOROSO */}
-      {isConfirmed && correctionSummary ? (
+      {/* Stepper Visual (Etapa 1 -> Etapa 2 -> Resultado) */}
+      <div className="flex items-center justify-between gap-2 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+              currentStep === "STUDENT_ANSWERS"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/40"
+                : "bg-emerald-600 text-white"
+            }`}
+          >
+            {currentStep !== "STUDENT_ANSWERS" ? <Check className="w-4 h-4" /> : "1"}
+          </div>
+          <span
+            className={`text-xs font-bold ${
+              currentStep === "STUDENT_ANSWERS" ? "text-white" : "text-slate-400"
+            }`}
+          >
+            Suas Respostas da Prova
+          </span>
+        </div>
+
+        <div className="w-8 sm:w-16 h-0.5 bg-slate-800" />
+
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+              currentStep === "OFFICIAL_KEY"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/40"
+                : currentStep === "RESULT"
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-800 text-slate-400"
+            }`}
+          >
+            {currentStep === "RESULT" ? <Check className="w-4 h-4" /> : "2"}
+          </div>
+          <span
+            className={`text-xs font-bold ${
+              currentStep === "OFFICIAL_KEY" ? "text-white" : "text-slate-400"
+            }`}
+          >
+            Gabarito Oficial
+          </span>
+        </div>
+
+        <div className="w-8 sm:w-16 h-0.5 bg-slate-800" />
+
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+              currentStep === "RESULT"
+                ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/40"
+                : "bg-slate-800 text-slate-400"
+            }`}
+          >
+            3
+          </div>
+          <span
+            className={`text-xs font-bold ${
+              currentStep === "RESULT" ? "text-white" : "text-slate-400"
+            }`}
+          >
+            Relatório TRI & Erros
+          </span>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          ETAPA 1: RESPOSTAS MARCADAS PELO ALUNO
+          ========================================================================= */}
+      {currentStep === "STUDENT_ANSWERS" && (
+        <Card className="p-6 space-y-6">
+          {/* Seletor Oficial do Dia do ENEM */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300 block">
+              1. Selecione o Caderno da Prova que você resolveu:
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setExamDay("DIA_1");
+                  setStudentAnswers(null);
+                }}
+                className={`p-3 rounded-xl text-left border transition-all ${
+                  examDay === "DIA_1"
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                <span className="font-bold text-xs block">1º DIA DO ENEM (Q01 a Q90)</span>
+                <span className="text-[10px] opacity-80 block">Linguagens (1-45) & Humanas (46-90)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setExamDay("DIA_2");
+                  setStudentAnswers(null);
+                }}
+                className={`p-3 rounded-xl text-left border transition-all ${
+                  examDay === "DIA_2"
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                <span className="font-bold text-xs block">2º DIA DO ENEM (Q91 a Q180)</span>
+                <span className="text-[10px] opacity-80 block">Natureza (91-135) & Matemática (136-180)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setExamDay("AREA_45");
+                  setStudentAnswers(null);
+                }}
+                className={`p-3 rounded-xl text-left border transition-all ${
+                  examDay === "AREA_45"
+                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                }`}
+              >
+                <span className="font-bold text-xs block">1 ÁREA ESPECÍFICA (45 Qs)</span>
+                <span className="text-[10px] opacity-80 block">Simulado temático de 45 questões</span>
+              </button>
+            </div>
+          </div>
+
+          {!studentAnswers ? (
+            <div className="space-y-4 pt-2 border-t border-slate-800">
+              <label className="text-xs font-bold text-slate-300 block">
+                2. Como deseja enviar suas {totalQuestionsCount} respostas?
+              </label>
+              <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setStudentInputMode("PDF")}
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    studentInputMode === "PDF"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Enviar PDF da sua Folha</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentInputMode("TEXT")}
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    studentInputMode === "TEXT"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Colar Texto</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentInputMode("GRID")}
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    studentInputMode === "GRID"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <FileCode className="w-4 h-4" />
+                  <span>Grade Manual ({totalQuestionsCount} Qs)</span>
+                </button>
+              </div>
+
+              {studentInputMode === "PDF" && (
+                <div className="p-8 border-dashed border-2 border-indigo-500/30 hover:border-indigo-500/60 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 bg-slate-950/40">
+                  <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                    <FileText className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1 max-w-sm">
+                    <h3 className="text-base font-bold text-white">
+                      {studentPdfName ? `PDF: ${studentPdfName}` : "Selecione o PDF das suas Respostas"}
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      O leitor extrai as questões marcadas e monta a grade para você revisar.
+                    </p>
+                  </div>
+
+                  <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs sm:text-sm font-bold transition-all bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 h-11 px-6 py-2.5 cursor-pointer">
+                    {isExtractingStudent ? (
+                      <>
+                        <RotateCw className="w-4 h-4 mr-2 animate-spin" />
+                        <span>Carregando Respostas do PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-4 h-4 mr-2" />
+                        <span>Escolher Arquivo PDF</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      onChange={handleStudentPdfUpload}
+                      disabled={isExtractingStudent}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {studentInputMode === "TEXT" && (
+                <div className="space-y-4">
+                  <textarea
+                    rows={7}
+                    placeholder={"01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C\n08-B\n09-D\n10-E..."}
+                    value={studentText}
+                    onChange={(e) => setStudentText(e.target.value)}
+                    className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs sm:text-sm focus:border-indigo-500 focus:outline-none custom-scrollbar"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={handleStudentTextParse}
+                      disabled={isExtractingStudent}
+                      className="gap-2 text-xs font-bold"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>Carregar Respostas na Grade</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {studentInputMode === "GRID" && (
+                <div className="text-center py-6 space-y-4">
+                  <Button
+                    variant="glow"
+                    size="lg"
+                    onClick={() => setStudentAnswers(buildInitialGrid())}
+                    className="text-xs font-bold gap-2"
+                  >
+                    <FileCode className="w-4 h-4" />
+                    <span>Abrir Grade de {totalQuestionsCount} Questões</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Grade das Respostas do Aluno */
+            <div className="space-y-6 animate-in fade-in-50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="success" className="text-xs font-bold">
+                      {studentAnswers.length} Questões Marcadas
+                    </Badge>
+                    <span className="text-xs text-slate-400">
+                      Caderno: {examDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mt-1">
+                    Confira as Alternativas que você marcou na Prova
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Toque em qualquer letra para ajustar se necessário antes de avançar para o gabarito oficial.
+                  </p>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStudentAnswers(null)}
+                  className="text-xs gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Trocar Arquivo</span>
+                </Button>
+              </div>
+
+              {/* Grid das Questões */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5 max-h-[440px] overflow-y-auto custom-scrollbar pr-2">
+                {studentAnswers.map((item) => {
+                  const meta = getEnemQuestionMetadata(item.questionNumber);
+                  return (
+                    <div
+                      key={item.questionNumber}
+                      className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center space-y-1.5 hover:border-indigo-500/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between w-full px-1">
+                        <span className="text-[11px] font-bold text-slate-300">
+                          Q{item.questionNumber.toString().padStart(2, "0")}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-semibold truncate max-w-[42px]">
+                          {meta.area.replace("Ciências ", "").slice(0, 4)}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-1">
+                        {(["A", "B", "C", "D", "E"] as const).map((alt) => (
+                          <button
+                            key={alt}
+                            type="button"
+                            onClick={() => updateStudentAnswer(item.questionNumber, alt)}
+                            className={`w-6 h-6 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                              item.alternative === alt
+                                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/50 scale-105"
+                                : "bg-slate-800/80 text-slate-400 hover:bg-slate-700 hover:text-white"
+                            }`}
+                          >
+                            {alt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Botão de Avanço para a Etapa 2 */}
+              <div className="flex justify-end pt-4 border-t border-slate-800">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => setCurrentStep("OFFICIAL_KEY")}
+                  className="gap-2 font-bold text-xs sm:text-sm"
+                >
+                  <span>Avançar para o Gabarito Oficial (Etapa 2)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* =========================================================================
+          ETAPA 2: GABARITO OFICIAL DA PROVA PARA COMPARAÇÃO
+          ========================================================================= */}
+      {currentStep === "OFFICIAL_KEY" && (
+        <Card className="p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+              <Badge variant="default" className="text-xs font-bold">
+                Etapa 2 de 2: Gabarito Oficial de Correção
+              </Badge>
+              <h3 className="text-lg font-bold text-white mt-1">
+                Como deseja comparar suas {studentAnswers?.length} respostas?
+              </h3>
+              <p className="text-xs text-slate-300">
+                Escolha o gabarito oficial de referência para calcular seus acertos e nota TRI.
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentStep("STUDENT_ANSWERS")}
+              className="text-xs gap-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Voltar para Minhas Respostas</span>
+            </Button>
+          </div>
+
+          {/* Opções de Gabarito Oficial */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setOfficialKeyMode("DEFAULT_ENEM");
+                setOfficialAnswers(null);
+              }}
+              className={`p-4 rounded-2xl text-left border transition-all ${
+                officialKeyMode === "DEFAULT_ENEM"
+                  ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
+                  : "bg-slate-900 border-slate-800 hover:border-slate-700"
+              }`}
+            >
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white mb-2">
+                <FileBadge className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-xs text-white block">Gabarito Oficial ENEM</span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                Utiliza a régua padrão do INEP para o {examDay === "DIA_1" ? "1º Dia" : "2º Dia"}.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOfficialKeyMode("UPLOAD_PDF")}
+              className={`p-4 rounded-2xl text-left border transition-all ${
+                officialKeyMode === "UPLOAD_PDF"
+                  ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
+                  : "bg-slate-900 border-slate-800 hover:border-slate-700"
+              }`}
+            >
+              <div className="w-8 h-8 rounded-xl bg-purple-600 flex items-center justify-center text-white mb-2">
+                <FileText className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-xs text-white block">Enviar PDF do Gabarito</span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                Carregue o PDF de gabarito do SAS, Poliedro, Bernoulli, etc.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOfficialKeyMode("PASTE_TEXT")}
+              className={`p-4 rounded-2xl text-left border transition-all ${
+                officialKeyMode === "PASTE_TEXT"
+                  ? "bg-indigo-600/20 border-indigo-500 shadow-md shadow-indigo-600/20"
+                  : "bg-slate-900 border-slate-800 hover:border-slate-700"
+              }`}
+            >
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white mb-2">
+                <Edit3 className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-xs text-white block">Colar Texto do Gabarito</span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                Cole o gabarito oficial em formato 01-A, 02-B...
+              </span>
+            </button>
+          </div>
+
+          {/* Upload de PDF do Gabarito Oficial */}
+          {officialKeyMode === "UPLOAD_PDF" && (
+            <div className="p-6 border-dashed border-2 border-indigo-500/30 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 bg-slate-950/40">
+              <h4 className="text-xs font-bold text-white">
+                {officialPdfName ? `Gabarito PDF: ${officialPdfName}` : "Selecione o PDF do Gabarito Oficial"}
+              </h4>
+              <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white h-10 px-5 cursor-pointer">
+                {isExtractingOfficial ? (
+                  <>
+                    <RotateCw className="w-4 h-4 mr-2 animate-spin" />
+                    <span>Lendo Gabarito Oficial...</span>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud className="w-4 h-4 mr-2" />
+                    <span>Escolher PDF do Gabarito Oficial</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleOfficialPdfUpload}
+                  disabled={isExtractingOfficial}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Colar Texto do Gabarito Oficial */}
+          {officialKeyMode === "PASTE_TEXT" && (
+            <div className="space-y-3">
+              <textarea
+                rows={5}
+                placeholder={"01-A\n02-B\n03-C..."}
+                value={officialText}
+                onChange={(e) => setOfficialText(e.target.value)}
+                className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs focus:border-indigo-500 focus:outline-none"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOfficialTextParse}
+                disabled={isExtractingOfficial}
+                className="text-xs"
+              >
+                Processar Texto do Gabarito
+              </Button>
+            </div>
+          )}
+
+          {/* Comparação Lado a Lado Preliminar */}
+          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
+            <span className="text-slate-300">
+              Pronto para comparar <strong>{studentAnswers?.length} questões</strong> com a matriz oficial de{" "}
+              <strong>{examDay === "DIA_1" ? "Linguagens e Humanas" : "Natureza e Matemática"}</strong>.
+            </span>
+          </div>
+
+          {/* Botão Final de Disparo da Correção */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
+            <span className="text-xs text-slate-400">
+              Ao clicar, o sistema fará a correção oficial e registrará as falhas no seu Banco de Erros.
+            </span>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleRunCorrection}
+              disabled={isProcessingCorrection}
+              className="gap-2 w-full sm:w-auto cursor-pointer font-bold"
+            >
+              {isProcessingCorrection ? (
+                <>
+                  <RotateCw className="w-4 h-4 animate-spin" />
+                  <span>Calculando TRI e Diagnóstico...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>🎯 Realizar Correção e Gerar Diagnóstico TRI</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* =========================================================================
+          ETAPA 3: RELATÓRIO PÓS-CORREÇÃO COM APONTAMENTO DE CADA ERRO
+          ========================================================================= */}
+      {currentStep === "RESULT" && correctionSummary && (
         <Card className="p-6 sm:p-8 space-y-6 border-indigo-500/40 glow-indigo animate-in fade-in-50">
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
@@ -262,7 +870,7 @@ export default function EnviarSimuladoPage() {
               Correção e Diagnóstico do {correctionSummary.dayLabel} Concluídos!
             </h2>
             <p className="text-xs text-slate-300">
-              O gabarito de {correctionSummary.totalQuestions} questões foi processado. Todas as questões erradas foram catalogadas com as disciplinas oficiais no seu Banco de Erros.
+              O gabarito de {correctionSummary.totalQuestions} questões foi corrigido. As questões incorretas foram catalogadas com as disciplinas 100% corretas no Banco de Erros.
             </p>
           </div>
 
@@ -286,7 +894,7 @@ export default function EnviarSimuladoPage() {
             </div>
           </div>
 
-          {/* Lista Detalhada das Questões que o Aluno Errou */}
+          {/* Lista detalhada dos erros */}
           {correctionSummary.wrongItems.length > 0 && (
             <div className="space-y-3 pt-2">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -320,7 +928,7 @@ export default function EnviarSimuladoPage() {
                         <span className="font-bold text-rose-400 text-sm">{err.userAlt}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-slate-400 block text-[10px]">Gabarito:</span>
+                        <span className="text-slate-400 block text-[10px]">Gabarito Oficial:</span>
                         <span className="font-bold text-emerald-400 text-sm">{err.correctAlt}</span>
                       </div>
                     </div>
@@ -344,313 +952,21 @@ export default function EnviarSimuladoPage() {
                 <span>Acompanhar Evolução TRI</span>
               </Button>
             </Link>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => {
+                setCurrentStep("STUDENT_ANSWERS");
+                setStudentAnswers(null);
+                setOfficialAnswers(null);
+                setCorrectionSummary(null);
+              }}
+              className="text-xs"
+            >
+              Nova Correção
+            </Button>
           </div>
         </Card>
-      ) : !parsedItems ? (
-        /* SELEÇÃO DO DIA DO ENEM E FORMATO DE ENVIO */
-        <Card className="p-6 space-y-6">
-          {/* Seletor Oficial do Dia do ENEM */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300 block">
-              1. Selecione o Dia / Caderno do ENEM correspondente ao Gabarito:
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setExamDay("DIA_1");
-                  setParsedItems(null);
-                }}
-                className={`p-3 rounded-xl text-left border transition-all ${
-                  examDay === "DIA_1"
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                <span className="font-bold text-xs block">1º DIA DO ENEM (Q01 a Q90)</span>
-                <span className="text-[10px] opacity-80 block">Linguagens (1-45) & Humanas (46-90)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setExamDay("DIA_2");
-                  setParsedItems(null);
-                }}
-                className={`p-3 rounded-xl text-left border transition-all ${
-                  examDay === "DIA_2"
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                <span className="font-bold text-xs block">2º DIA DO ENEM (Q91 a Q180)</span>
-                <span className="text-[10px] opacity-80 block">Natureza (91-135) & Matemática (136-180)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setExamDay("AREA_45");
-                  setParsedItems(null);
-                }}
-                className={`p-3 rounded-xl text-left border transition-all ${
-                  examDay === "AREA_45"
-                    ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
-                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                }`}
-              >
-                <span className="font-bold text-xs block">1 ÁREA ESPECÍFICA (45 Qs)</span>
-                <span className="text-[10px] opacity-80 block">Simulado temático de 45 questões</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Seletor de Modo de Envio */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300 block">
-              2. Como deseja enviar o gabarito?
-            </label>
-            <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800">
-              <button
-                type="button"
-                onClick={() => setInputMode("PDF")}
-                className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  inputMode === "PDF"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <FileText className="w-4 h-4" />
-                <span>Enviar Arquivo PDF</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode("TEXT")}
-                className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  inputMode === "TEXT"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <Edit3 className="w-4 h-4" />
-                <span>Colar Texto</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode("GRID")}
-                className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  inputMode === "GRID"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                <FileCode className="w-4 h-4" />
-                <span>Grade Manual ({totalQuestionsCount} Qs)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* MODO 1: UPLOAD DE PDF */}
-          {inputMode === "PDF" && (
-            <div className="p-8 border-dashed border-2 border-indigo-500/30 hover:border-indigo-500/60 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 bg-slate-950/40">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                <FileText className="w-8 h-8" />
-              </div>
-              <div className="space-y-1 max-w-sm">
-                <h3 className="text-base font-bold text-white">
-                  {pdfFileName ? `PDF Selecionado: ${pdfFileName}` : "Selecione o PDF do Gabarito"}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  O leitor extrai as questões do PDF e monta a grade de {totalQuestionsCount} questões correspondentes para sua conferência.
-                </p>
-              </div>
-
-              <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs sm:text-sm font-bold transition-all focus-visible:outline-none bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 h-11 px-6 py-2.5 cursor-pointer">
-                {isExtractingPDF ? (
-                  <>
-                    <RotateCw className="w-4 h-4 mr-2 animate-spin" />
-                    <span>Lendo PDF ({totalQuestionsCount} Questões)...</span>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud className="w-4 h-4 mr-2" />
-                    <span>Escolher Arquivo PDF</span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handlePdfUpload}
-                  disabled={isExtractingPDF}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          )}
-
-          {/* MODO 2: DIGITAÇÃO DE TEXTO */}
-          {inputMode === "TEXT" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-300">
-                  Cole o gabarito (ex: 01-A, 02-B... ou sequência de letras):
-                </label>
-              </div>
-
-              <textarea
-                rows={8}
-                placeholder={"01-A\n02-C\n03-D\n04-B\n05-E\n06-A\n07-C\n08-B\n09-D\n10-E..."}
-                value={textGabarito}
-                onChange={(e) => setTextGabarito(e.target.value)}
-                className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs sm:text-sm focus:border-indigo-500 focus:outline-none custom-scrollbar"
-              />
-
-              <div className="flex justify-end">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={handleParseText}
-                  disabled={isExtractingPDF}
-                  className="gap-2 text-xs font-bold"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Processar {totalQuestionsCount} Questões</span>
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* MODO 3: GRADE RÁPIDA DE QUESTÕES */}
-          {inputMode === "GRID" && (
-            <div className="text-center py-6 space-y-4">
-              <h3 className="text-sm font-bold text-white">
-                Abrir grade de {totalQuestionsCount} questões (Questões {startQuestionNum.toString().padStart(2, "0")} a {endQuestionNum.toString().padStart(2, "0")}):
-              </h3>
-              <Button
-                variant="glow"
-                size="lg"
-                onClick={() => setParsedItems(buildInitialGrid())}
-                className="text-xs font-bold gap-2"
-              >
-                <FileCode className="w-4 h-4" />
-                <span>Preencher Grade do {examDay === "DIA_1" ? "1º Dia" : examDay === "DIA_2" ? "2º Dia" : "Simulado"}</span>
-              </Button>
-            </div>
-          )}
-        </Card>
-      ) : (
-        /* CONFIRMAÇÃO E EDIÇÃO DA GRADE COMPLETA (SEM CORREÇÃO FANTASMA) */
-        <div className="space-y-6 animate-in fade-in-50 duration-200">
-          <Card className="p-6 border-indigo-500/30 glow-indigo space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="success" className="text-xs font-bold">
-                    {parsedItems.length} Questões (Q{startQuestionNum.toString().padStart(2, "0")} a Q{endQuestionNum.toString().padStart(2, "0")})
-                  </Badge>
-                  <span className="text-xs text-slate-400">
-                    Caderno: {examDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}
-                  </span>
-                </div>
-                <h3 className="text-lg font-bold text-white mt-1">
-                  Confira suas Alternativas antes de Realizar a Correção
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Toque em qualquer letra para ajustar se necessário. Nenhuma correção será realizada sem você conferir.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setParsedItems(null)}
-                  className="text-xs gap-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Trocar Arquivo / Voltar</span>
-                </Button>
-              </div>
-            </div>
-
-            {/* Alerta de linhas não reconhecidas se houver */}
-            {unrecognizedLines.length > 0 && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="block">Avisos do parser:</strong>
-                  <span>{unrecognizedLines.join(", ")}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Grade Completa de Todas as Questões com as Disciplinas Reais */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5 max-h-[480px] overflow-y-auto custom-scrollbar pr-2">
-              {parsedItems.map((item) => {
-                const meta = getEnemQuestionMetadata(item.questionNumber);
-                return (
-                  <div
-                    key={item.questionNumber}
-                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center space-y-1.5 hover:border-indigo-500/40 transition-colors"
-                  >
-                    <div className="flex items-center justify-between w-full px-1">
-                      <span className="text-[11px] font-bold text-slate-300">
-                        Q{item.questionNumber.toString().padStart(2, "0")}
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-semibold truncate max-w-[45px]">
-                        {meta.area.replace("Ciências ", "").slice(0, 4)}
-                      </span>
-                    </div>
-
-                    <div className="flex gap-1">
-                      {(["A", "B", "C", "D", "E"] as const).map((alt) => (
-                        <button
-                          key={alt}
-                          type="button"
-                          onClick={() => handleUpdateAlternative(item.questionNumber, alt)}
-                          className={`w-6 h-6 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                            item.alternative === alt
-                              ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/50 scale-105"
-                              : "bg-slate-800/80 text-slate-400 hover:bg-slate-700 hover:text-white"
-                          }`}
-                        >
-                          {alt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Botão de Finalização da Correção */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
-              <span className="text-xs text-slate-400">
-                Ao clicar, o sistema fará a correção oficial comparando com a matriz de {examDay === "DIA_1" ? "Linguagens e Humanas" : "Natureza e Matemática"}.
-              </span>
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={handleConfirmAndCorrect}
-                disabled={isProcessingCorrection}
-                className="gap-2 w-full sm:w-auto cursor-pointer font-bold"
-              >
-                {isProcessingCorrection ? (
-                  <>
-                    <RotateCw className="w-4 h-4 animate-spin" />
-                    <span>Calculando TRI e Diagnóstico...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Confirmar e Realizar Correção ({parsedItems.length} Qs)</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </Card>
-        </div>
       )}
     </div>
   );
