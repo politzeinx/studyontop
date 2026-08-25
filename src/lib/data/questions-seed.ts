@@ -1,0 +1,261 @@
+import { QuestionData, KnowledgeArea, QuestionDifficulty, ReasoningType } from "@/types";
+
+export const SEED_QUESTIONS: QuestionData[] = [
+  // 1. MATEMÁTICA - GEOMETRIA ESPACIAL (ENEM 2024 Recente)
+  {
+    id: "enem-2024-mat-142",
+    officialCode: "ENEM-2024-MAT-Q142",
+    year: 2024,
+    edition: "Regular",
+    area: KnowledgeArea.MATEMATICA,
+    discipline: "Matemática",
+    competence: 2,
+    skill: 8,
+    subject: "Geometria Espacial",
+    subsubject: "Prismas e Cilindros",
+    difficulty: QuestionDifficulty.MEDIA,
+    triParamA: 1.35,
+    triParamB: 0.15,
+    triParamC: 0.20,
+    hasOfficialTri: true,
+    isRecentPattern: true,
+    reasoningType: ReasoningType.CALCULO_GEOMETRICO,
+    calculationNeeded: true,
+    isInterdisciplinary: false,
+    hasGraph: false,
+    hasTable: false,
+    hasFormulas: true,
+    statement:
+      "Uma indústria de cosméticos desenvolveu um novo frasco cilíndrico para perfume. O frasco possui altura interna de 12 cm e raio da base medindo 3 cm. O setor de embalagens deseja que o perfume ocupe exatamente 80% da capacidade total do frasco, deixando os 20% restantes para expansão gasosa. Adotando π = 3, o volume de perfume, em mililitros (mL), que deve ser colocado em cada frasco é:",
+    contextText:
+      "A indústria busca otimizar a segurança do transporte e padronizar o envase volumétrico dos seus novos recipientes cilíndricos.",
+    images: [],
+    alternatives: [
+      { letter: "A", text: "216 mL" },
+      { letter: "B", text: "259,2 mL" },
+      { letter: "C", text: "324 mL" },
+      { letter: "D", text: "432 mL" },
+      { letter: "E", text: "648 mL" },
+    ],
+    correctAlternative: "B",
+    explanation:
+      "O volume total do cilindro é V = π · r² · h = 3 · (3)² · 12 = 3 · 9 · 12 = 324 cm³. Como 1 cm³ = 1 mL, o volume total é 324 mL. O volume ocupado pelo perfume é 80% de 324 mL = 0,80 · 324 = 259,2 mL. Resposta correta: Alternativa B.",
+    whatToStudy:
+      "Volume de cilindros retos (V = π·r²·h), cálculo de porcentagem sobre volumes e conversão de unidades (cm³ para mL).",
+  },
+
+  // 2. MATEMÁTICA - TRONCO DE PIRÂMIDE & PROPORCIONALIDADE (ENEM 2023 Recente)
+  {
+    id: "enem-2023-mat-156",
+    officialCode: "ENEM-2023-MAT-Q156",
+    year: 2023,
+    edition: "Regular",
+    area: KnowledgeArea.MATEMATICA,
+    discipline: "Matemática",
+    competence: 2,
+    skill: 9,
+    subject: "Geometria Espacial",
+    subsubject: "Tronco de Pirâmide e Semelhança",
+    difficulty: QuestionDifficulty.DIFICIL,
+    triParamA: 1.75,
+    triParamB: 1.35,
+    triParamC: 0.18,
+    hasOfficialTri: true,
+    isRecentPattern: true,
+    reasoningType: ReasoningType.CALCULO_GEOMETRICO,
+    calculationNeeded: true,
+    isInterdisciplinary: false,
+    hasGraph: true,
+    hasTable: false,
+    hasFormulas: true,
+    statement:
+      "Um reservatório de água tem o formato de uma pirâmide regular de base quadrada invertida, com altura total de 6 metros e aresta da base medindo 4 metros. O reservatório é preenchido com água até a altura de 3 metros a partir do vértice inferior. Qual é a fração do volume total do reservatório ocupada pela água?",
+    contextText:
+      "Estruturas piramidais invertidas são comuns em decantadores industriais de tratamento hídrico.",
+    images: [],
+    alternatives: [
+      { letter: "A", text: "1/8" },
+      { letter: "B", text: "1/4" },
+      { letter: "C", text: "1/2" },
+      { letter: "D", text: "3/8" },
+      { letter: "E", text: "7/8" },
+    ],
+    correctAlternative: "A",
+    explanation:
+      "A pirâmide formada pela água é semelhante à pirâmide total. A razão linear de semelhança entre as alturas é k = h_água / h_total = 3 / 6 = 1/2. Como a razão entre os volumes de sólidos semelhantes é k³, temos V_água / V_total = (1/2)³ = 1/8. Resposta correta: Alternativa A.",
+    whatToStudy:
+      "Propriedade fundamental de semelhança de sólidos: a razão entre áreas é k² e a razão entre volumes é k³.",
+  },
+
+  // 3. CIÊNCIAS DA NATUREZA - QUÍMICA ORGÂNICA (ENEM 2024 Recente)
+  {
+    id: "enem-2024-nat-108",
+    officialCode: "ENEM-2024-NAT-Q108",
+    year: 2024,
+    edition: "Regular",
+    area: KnowledgeArea.NATUREZA,
+    discipline: "Química",
+    competence: 7,
+    skill: 24,
+    subject: "Química Orgânica",
+    subsubject: "Reações de Oxidação e Funções Orgânicas",
+    difficulty: QuestionDifficulty.MEDIA,
+    triParamA: 1.40,
+    triParamB: 0.20,
+    triParamC: 0.20,
+    hasOfficialTri: true,
+    isRecentPattern: true,
+    reasoningType: ReasoningType.APLICACAO_CONCEITUAL,
+    calculationNeeded: false,
+    isInterdisciplinary: true,
+    hasGraph: false,
+    hasTable: false,
+    hasFormulas: false,
+    statement:
+      "O bafômetro descartável funciona com base na oxidação do etanol presente no ar expirado pelo motorista. O etanol reage com dicromato de potássio (K₂Cr₂O₇) em meio ácido, provocando a mudança de cor do alaranjado para o verde à medida que o cromo é reduzido. Nesse processo de oxidação branda/completa, o etanol é convertido primariamente em:",
+    contextText:
+      "Testes de alcoolemia utilizam a reatividade do grupo hidroxila de álcoois primários frente a agentes oxidantes fortes.",
+    images: [],
+    alternatives: [
+      { letter: "A", text: "Éter dietílico" },
+      { letter: "B", text: "Ácido acético (ácido etanoico)" },
+      { letter: "C", text: "Acetona (propanona)" },
+      { letter: "D", text: "Etano" },
+      { letter: "E", text: "Metano" },
+    ],
+    correctAlternative: "B",
+    explanation:
+      "O etanol (álcool primário) sofre oxidação na presença de dicromato de potássio em meio ácido. A oxidação passa por etanal (aldeído) e atinge o ácido etanoico (ácido acético). Resposta correta: Alternativa B.",
+    whatToStudy:
+      "Oxidação de álcoois primários (álcool -> aldeído -> ácido carboxílico) e oxidação de álcoois secundários (álcool -> cetona).",
+  },
+
+  // 4. CIÊNCIAS DA NATUREZA - FÍSICA / TERMODINÂMICA (ENEM 2023 Recente)
+  {
+    id: "enem-2023-nat-125",
+    officialCode: "ENEM-2023-NAT-Q125",
+    year: 2023,
+    edition: "Regular",
+    area: KnowledgeArea.NATUREZA,
+    discipline: "Física",
+    competence: 6,
+    skill: 21,
+    subject: "Termodinâmica",
+    subsubject: "Ciclo de Carnot e Rendimento Térmico",
+    difficulty: QuestionDifficulty.DIFICIL,
+    triParamA: 1.60,
+    triParamB: 1.20,
+    triParamC: 0.20,
+    hasOfficialTri: true,
+    isRecentPattern: true,
+    reasoningType: ReasoningType.CALCULO_ALGEBRICO,
+    calculationNeeded: true,
+    isInterdisciplinary: false,
+    hasGraph: false,
+    hasTable: false,
+    hasFormulas: true,
+    statement:
+      "Um protótipo de motor térmico opera segundo o ciclo de Carnot entre duas fontes térmicas: a fonte quente a 327 °C e a fonte fria a 27 °C. Em cada ciclo, o motor recebe 1.000 J de calor da fonte quente. O trabalho máximo útil realizado por esse motor por ciclo é de:",
+    contextText:
+      "O ciclo de Carnot estabelece o limite teórico de eficiência máxima para qualquer máquina térmica que opere entre duas temperaturas fixas.",
+    images: [],
+    alternatives: [
+      { letter: "A", text: "917 J" },
+      { letter: "B", text: "500 J" },
+      { letter: "C", text: "400 J" },
+      { letter: "D", text: "300 J" },
+      { letter: "E", text: "100 J" },
+    ],
+    correctAlternative: "B",
+    explanation:
+      "As temperaturas devem ser convertidas obrigatoriamente para Kelvin: T_quente = 327 + 273 = 600 K; T_fria = 27 + 273 = 300 K. O rendimento de Carnot é η = 1 - (T_fria / T_quente) = 1 - (300 / 600) = 1 - 0,5 = 0,5 (50%). O trabalho realizado é W = η · Q_quente = 0,5 · 1.000 J = 500 J. Resposta correta: Alternativa B.",
+    whatToStudy:
+      "Segunda Lei da Termodinâmica, Rendimento de Carnot e conversão estrita de temperaturas para a escala Kelvin (T = t + 273).",
+  },
+
+  // 5. CIÊNCIAS DA NATUREZA - BIOLOGIA / ECOLOGIA (ENEM 2024 Recente)
+  {
+    id: "enem-2024-nat-095",
+    officialCode: "ENEM-2024-NAT-Q095",
+    year: 2024,
+    edition: "Regular",
+    area: KnowledgeArea.NATUREZA,
+    discipline: "Biologia",
+    competence: 4,
+    skill: 14,
+    subject: "Ecologia",
+    subsubject: "Eutrofização e Ciclos Biogeoquímicos",
+    difficulty: QuestionDifficulty.FACIL,
+    triParamA: 1.15,
+    triParamB: -1.10,
+    triParamC: 0.20,
+    hasOfficialTri: true,
+    isRecentPattern: true,
+    reasoningType: ReasoningType.INTERPRETACAO_DIRETA,
+    calculationNeeded: false,
+    isInterdisciplinary: true,
+    hasGraph: false,
+    hasTable: false,
+    hasFormulas: false,
+    statement:
+      "O descarte inadequado de esgoto doméstico e fertilizantes agrícolas em corpos d'água introduz grande quantidade de compostos nitrogenados e fosfatados. O primeiro evento biológico decorrente desse excesso de nutrientes que desencadeia o processo de eutrofização é:",
+    contextText:
+      "A poluição antrópica em mananciais hídricos altera o equilíbrio trófico dos ecossistemas aquáticos continentais.",
+    images: [],
+    alternatives: [
+      { letter: "A", text: "Morte imediata de peixes por asfixia." },
+      { letter: "B", text: "Proliferação intensa de algas e cianobactérias superficiais (floração)." },
+      { letter: "C", text: "Diminuição súbita da turbidez da água." },
+      { letter: "D", text: "Aumento da penetração da radiação solar no leito do rio." },
+      { letter: "E", text: "Inibição total da atividade de bactérias decompositoras anaeróbias." },
+    ],
+    correctAlternative: "B",
+    explanation:
+      "A introdução maciça de N e P promove a proliferação descontrolada do fitoplâncton superficial (floração). Isso bloqueia a luz, mata a vegetação de fundo e, subsequentemente, consome o O₂ pela decomposição aeróbia. Resposta correta: Alternativa B.",
+    whatToStudy:
+      "Processo e etapas da Eutrofização artificial e impactos de poluentes nos ciclos de nitrogênio e fósforo.",
+  },
+
+  // 6. CIÊNCIAS HUMANAS - HISTÓRIA DO BRASIL (ENEM 2023 Recente)
+  {
+    id: "enem-2023-hum-064",
+    officialCode: "ENEM-2023-HUM-Q064",
+    year: 2023,
+    edition: "Regular",
+    area: KnowledgeArea.HUMANAS,
+    discipline: "História",
+    competence: 3,
+    skill: 11,
+    subject: "História do Brasil",
+    subsubject: "Era Vargas e Cidadania Regulada",
+    difficulty: QuestionDifficulty.MEDIA,
+    triParamA: 1.25,
+    triParamB: 0.05,
+    triParamC: 0.20,
+    hasOfficialTri: true,
+    isRecentPattern: true,
+    reasoningType: ReasoningType.ANALISE_CRITICA,
+    calculationNeeded: false,
+    isInterdisciplinary: true,
+    hasGraph: false,
+    hasTable: false,
+    hasFormulas: false,
+    statement:
+      "A Consolidação das Leis do Trabalho (CLT), promulgada em 1943 durante o Estado Novo, representou um marco nas relações de trabalho no Brasil. Sob a perspectiva da sociologia política varguista, a concessão de direitos trabalhistas atrelada à sindicalização oficial tinha como propósito principal:",
+    contextText:
+      "A legislação social varguista articulava proteção ao trabalhador urbano e controle governamental das mobilizações operárias.",
+    images: [],
+    alternatives: [
+      { letter: "A", text: "Extinguir a intervenção do Estado na mediação dos conflitos de classe." },
+      { letter: "B", text: "Enquadrar o movimento operário em uma estrutura corporativista sob tutela do Ministério do Trabalho." },
+      { letter: "C", text: "Universalizar imediatamente os mesmos direitos aos trabalhadores do campo e domésticos." },
+      { letter: "D", text: "Promover a autonomia irrestrita dos sindicatos para a deflagração de greves." },
+      { letter: "E", text: "Incentivar a livre concorrência salarial sem fixação de piso mínimo governamental." },
+    ],
+    correctAlternative: "B",
+    explanation:
+      "A cidadania regulada na Era Vargas vinculava os direitos trabalhistas à carteira de trabalho e aos sindicatos oficiais tutelados pelo Estado (modelo corporativista de inspiração na Carta del Lavoro). Resposta correta: Alternativa B.",
+    whatToStudy:
+      "Estado Novo (1937-1945), Corporativismo Varguista, Criação da CLT e conceito de Cidadania Regulada (Wanderley Guilherme dos Santos).",
+  },
+];

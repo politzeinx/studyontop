@@ -1,0 +1,54 @@
+{
+  "name": "StudyOnTop — Plataforma Inteligente ENEM",
+  "short_name": "StudyOnTop",
+  "description": "Plataforma inteligente e adaptativa de preparação para o ENEM com TRI 3PL, OCR, Scanner de Provas, Repetição Espaçada FSRS e Diagnóstico Pedagógico.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0F19",
+  "theme_color": "#0B0F19",
+  "categories": ["education", "productivity"],
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Revisar Flashcards",
+      "short_name": "Flashcards",
+      "url": "/flashcards/revisar",
+      "description": "Iniciar sessão de revisão diária FSRS"
+    },
+    {
+      "name": "Scanner de Provas",
+      "short_name": "Scanner",
+      "url": "/scanner",
+      "description": "Escanear folha de respostas"
+    },
+    {
+      "name": "Simulado Adaptativo",
+      "short_name": "Simulado",
+      "url": "/simulados/novo",
+      "description": "Iniciar um novo simulado adaptativo"
+    }
+  ]
+}

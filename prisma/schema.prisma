@@ -1,0 +1,459 @@
+// Prisma Schema for StudyOnTop - Plataforma Inteligente ENEM
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------
+
+enum KnowledgeArea {
+  LINGUAGENS
+  HUMANAS
+  NATUREZA
+  MATEMATICA
+}
+
+enum QuestionDifficulty {
+  FACIL
+  MEDIA
+  DIFICIL
+}
+
+enum ReasoningType {
+  INTERPRETACAO_DIRETA
+  ANALISE_CRITICA
+  CALCULO_ALGEBRICO
+  CALCULO_GEOMETRICO
+  CORRELACAO_GRAFICA
+  APLICACAO_CONCEITUAL
+  METODO_CIENTIFICO
+  INTERDISCIPLINAR
+}
+
+enum SimulationType {
+  OFICIAL
+  ADAPTATIVO
+  ENEM_RECENTE
+  PERSONALIZADO
+}
+
+enum SimulationStatus {
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum AnswerStatus {
+  CORRETA
+  ERRADA
+  EM_BRANCO
+  ANULADA
+  CANCELADA
+}
+
+enum AnswerSource {
+  SCANNER_CAMERA
+  UPLOAD_IMAGEM
+  UPLOAD_PDF
+  GABARITO_TEXTO
+  ENTRADA_MANUAL
+}
+
+enum ErrorTaxonomy {
+  FALTA_CONHECIMENTO
+  ERRO_CONCEITUAL
+  INTERPRETACAO
+  CALCULO
+  ATENCAO
+  CONFUSAO_ALTERNATIVAS
+  ESTRATEGIA
+  TEMPO
+}
+
+enum DomainLevel {
+  ALTO
+  MEDIO
+  ATENCAO
+  PRIORIDADE
+}
+
+enum GainPotential {
+  MUITO_ALTO
+  ALTO
+  MEDIO
+  BAIXO
+}
+
+enum PriorityLevel {
+  MUITO_ALTA
+  ALTA
+  REVISAO
+  MANUTENCAO
+  BAIXA
+}
+
+enum CardType {
+  CONCEITO
+  IDENTIFICACAO
+  COMPARACAO
+  FORMULA
+  APLICACAO
+  VERDADEIRO_FALSO
+  ARMADILHAS_ENEM
+  ESTRATEGIA
+}
+
+enum CardStage {
+  NOVO
+  APRENDENDO
+  CONSOLIDANDO
+  DOMINADO
+  MANUTENCAO
+}
+
+enum LearningPhase {
+  APRENDER
+  CONSOLIDAR
+  MANTER
+}
+
+// ------------------------------------------------------
+// MODELS
+// ------------------------------------------------------
+
+model User {
+  id                String             @id @default(cuid())
+  name              String
+  email             String             @unique
+  avatarUrl         String?
+  targetCourse      String?            // Ex: Medicina, Engenharia
+  targetUniversity  String?            // Ex: USP, UFRJ, UFMG
+  studyHoursPerDay  Float              @default(3.0)
+  studyDaysPerWeek  Int                @default(6)
+  examDate          DateTime?          // Data prevista do ENEM
+  streakDays        Int                @default(0)
+  lastActiveAt      DateTime           @default(now())
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  simulations       ExamSimulation[]
+  domainMaps        DomainMap[]
+  flashcards        Flashcard[]
+  flashcardReviews  FlashcardReview[]
+  errorBank         ErrorBankItem[]
+  studyPlans        StudyPlan[]
+
+  @@map("users")
+}
+
+model Question {
+  id                  String             @id @default(cuid())
+  officialCode        String?            @unique // Ex: ENEM-2024-NAT-Q95
+  year                Int
+  edition             String             @default("Regular") // Regular, PPL, Digital, Reaplicação
+  applicationNumber   Int                @default(1)
+  area                KnowledgeArea
+  discipline          String             // Física, Química, Biologia, História, etc.
+  statement           String             @db.Text
+  contextText         String?            @db.Text
+  images              String[]           // URLs de diagramas, figuras ou charges
+  hasGraph            Boolean            @default(false)
+  hasTable            Boolean            @default(false)
+  hasFormulas         Boolean            @default(false)
+  
+  alternatives        Json               // [{ letter: 'A', text: '...', isCorrect: false }, ...]
+  correctAlternative  String             // 'A', 'B', 'C', 'D', 'E'
+  
+  competence          Int?               // Competência da Matriz do ENEM (1 a 9)
+  skill               Int?               // Habilidade da Matriz do ENEM (1 a 30)
+  subject             String             // Ex: Termodinâmica, Geometria Espacial
+  subsubject          String?            // Ex: Ciclo de Carnot, Prismas
+  difficulty          QuestionDifficulty @default(MEDIA)
+  
+  // Parâmetros TRI (Item Response Theory 3PL)
+  triParamA           Float?             // Discriminação (a)
+  triParamB           Float?             // Dificuldade (b)
+  triParamC           Float?             // Acerto casual / Chute (c)
+  hasOfficialTri      Boolean            @default(false)
+
+  // Metadados de análise do ENEM recente
+  isRecentPattern     Boolean            @default(false) // true para edições >= 2023
+  reasoningType       ReasoningType      @default(INTERPRETACAO_DIRETA)
+  calculationNeeded   Boolean            @default(false)
+  isInterdisciplinary Boolean            @default(false)
+  contextualizationScore Float           @default(0.8) // Grau de contexto prático/cotidiano
+
+  explanation         String?            @db.Text
+  whatToStudy         String?            @db.Text
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  studentAnswers      StudentAnswer[]
+  errorBankItems      ErrorBankItem[]
+  flashcards          Flashcard[]
+
+  @@index([area, subject])
+  @@index([year, isRecentPattern])
+  @@index([difficulty])
+  @@map("questions")
+}
+
+model ExamSimulation {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title              String             // Ex: "Simulado Geral - ENEM Recente 2024"
+  type               SimulationType     @default(ENEM_RECENTE)
+  targetArea         KnowledgeArea?
+  year               Int?
+  totalQuestions     Int                @default(45)
+  durationMinutes    Int                @default(180)
+  timeSpentSeconds   Int                @default(0)
+  
+  status             SimulationStatus   @default(EM_ANDAMENTO)
+  startedAt          DateTime           @default(now())
+  finishedAt         DateTime?
+
+  // Resultados
+  correctCount       Int                @default(0)
+  wrongCount         Int                @default(0)
+  blankCount         Int                @default(0)
+  cancelledCount     Int                @default(0)
+  accuracyPercentage Float              @default(0.0)
+
+  // Notas TRI
+  estimatedTriScore  Float?             // Nota calculada pelo algoritmo 3PL interno
+  officialTriScore   Float?             // Se foi simulado oficial com régua conhecida
+  consistencyScore   Float?             // Índice de consistência (0.0 a 1.0)
+  
+  // Relatório pós-simulado em JSON
+  diagnosticSummary  Json?              // Principais forças, fraquezas e plano de ação
+
+  answers            StudentAnswer[]
+  answerKeySubmissions AnswerKeySubmission[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([userId, status])
+  @@map("exam_simulations")
+}
+
+model StudentAnswer {
+  id                 String             @id @default(cuid())
+  simulationId       String
+  simulation         ExamSimulation     @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  questionId         String
+  question           Question           @relation(fields: [questionId], references: [id])
+  
+  chosenAlternative  String?            // 'A', 'B', 'C', 'D', 'E' ou null se em branco
+  status             AnswerStatus       @default(EM_BRANCO)
+  confidenceLevel    Float              @default(1.0) // 0.0 a 1.0 (extraído pelo OCR/Scanner)
+  source             AnswerSource       @default(ENTRADA_MANUAL)
+  isConfidenceLow    Boolean            @default(false)
+  isManuallyVerified Boolean            @default(false)
+  isChuteSuspect     Boolean            @default(false) // Baseado no indicador de consistência TRI
+  
+  timeSpentSeconds   Int?
+
+  errorBankItem      ErrorBankItem?
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([simulationId, questionId])
+  @@index([status])
+  @@map("student_answers")
+}
+
+model AnswerKeySubmission {
+  id                 String             @id @default(cuid())
+  simulationId       String
+  simulation         ExamSimulation     @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  
+  sourceType         String             // "FOTO", "PDF", "TEXTO", "TABELA"
+  rawContent         String?            @db.Text
+  parsedKey          Json               // [{ questionNumber: 1, letter: 'A' }, ...]
+  isConfirmed        Boolean            @default(false)
+  confirmedAt        DateTime?
+
+  createdAt          DateTime           @default(now())
+
+  @@map("answer_key_submissions")
+}
+
+model ErrorBankItem {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId         String
+  question           Question           @relation(fields: [questionId], references: [id])
+  studentAnswerId    String?            @unique
+  studentAnswer      StudentAnswer?     @relation(fields: [studentAnswerId], references: [id], onDelete: SetNull)
+  
+  subject            String
+  subsubject         String?
+  errorTaxonomy      ErrorTaxonomy      @default(FALTA_CONHECIMENTO)
+  userNote           String?            @db.Text
+  probableCause      String?            @db.Text
+  whatToStudy        String?            @db.Text
+  
+  errorCount         Int                @default(1)
+  reviewCount        Int                @default(0)
+  isResolved         Boolean            @default(false)
+  lastReviewedAt     DateTime?
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([userId, subject, errorTaxonomy])
+  @@map("error_bank_items")
+}
+
+model DomainMap {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  area               KnowledgeArea
+  subject            String
+  subsubject         String?
+  
+  domainScore        Float              @default(50.0) // 0.0 a 100.0
+  domainLevel        DomainLevel        @default(MEDIO)
+  learningPhase      LearningPhase      @default(CONSOLIDAR)
+  
+  totalQuestions     Int                @default(0)
+  totalCorrect       Int                @default(0)
+  accuracyRate       Float              @default(0.0)
+  
+  easyErrors         Int                @default(0)
+  mediumErrors       Int                @default(0)
+  hardErrors         Int                @default(0)
+  
+  recentTrend        Float              @default(0.0) // Taxa de variação recente (+ ou -)
+  recurrenceWeight   Float              @default(1.0) // Recorrência estatística no ENEM 2023+
+  gainPotential      GainPotential      @default(ALTO)
+  priorityIndex      Float              @default(50.0) // 0 a 100
+  priorityLevel      PriorityLevel      @default(ALTA)
+  
+  isContinuousRevision Boolean          @default(false) // Ex: Química Orgânica, Fórmulas de Física
+  lastPracticedAt    DateTime?
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([userId, subject, subsubject])
+  @@index([userId, area, priorityLevel])
+  @@map("domain_maps")
+}
+
+model Flashcard {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId         String?
+  question           Question?          @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  
+  subject            String
+  subsubject         String?
+  cardType           CardType           @default(CONCEITO)
+  frontContent       String             @db.Text
+  backContent        String             @db.Text
+  
+  stage              CardStage          @default(NOVO)
+  isContinuousRevision Boolean          @default(false)
+
+  // Parâmetros de Repetição Espaçada (SRS / FSRS / SM-2)
+  repetitionCount    Int                @default(0)
+  intervalDays       Float              @default(1.0)
+  easeFactor         Float              @default(2.5) // Fator SM-2
+  stability          Float              @default(1.0) // FSRS Stability
+  difficultyRating   Float              @default(5.0) // FSRS Difficulty (1 a 10)
+  
+  successStreak      Int                @default(0)
+  failureCount       Int                @default(0)
+  
+  lastReviewedAt     DateTime?
+  nextReviewDueAt    DateTime           @default(now())
+
+  reviews            FlashcardReview[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([userId, nextReviewDueAt, stage])
+  @@index([userId, subject])
+  @@map("flashcards")
+}
+
+model FlashcardReview {
+  id                 String             @id @default(cuid())
+  flashcardId        String
+  flashcard          Flashcard          @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  grade              Int                // 1 = Errei (Again), 2 = Difícil (Hard), 3 = Bom (Good), 4 = Fácil (Easy)
+  intervalBefore     Float
+  intervalAfter      Float
+  reviewedAt         DateTime           @default(now())
+  responseMs         Int?
+
+  @@index([userId, reviewedAt])
+  @@map("flashcard_reviews")
+}
+
+model StudyPlan {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  weeklyTargetHours  Float              @default(18.0)
+  generatedAt        DateTime           @default(now())
+  validUntil         DateTime?
+  
+  dailySchedule      Json               // [{ day: 'SEGUNDA', hours: 3, blocks: [{ subject: '...', durationMinutes: 60, type: 'TEORIA/SIMULADO/REVISAO' }] }]
+  focusSubjects      Json               // [{ subject: 'Geometria Espacial', priority: 'MUITO_ALTA', reason: '...' }]
+  activeAction       String?            // "Estude Geometria Espacial por 60 minutos"
+  
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([userId])
+  @@map("study_plans")
+}
+
+model EnemHistoricalTrend {
+  id                 String             @id @default(cuid())
+  year               Int
+  area               KnowledgeArea
+  discipline         String
+  subject            String
+  subsubject         String?
+  competence         Int?
+  skill              Int?
+  
+  frequencyCount     Int                @default(1)
+  percentageInExam   Float              @default(0.0)
+  recurrenceScore    Float              @default(0.5) // Grau de recorrência histórica
+  isCurrentPattern   Boolean            @default(true) // true para >= 2023
+  
+  styleNotes         String?            @db.Text // "Como esse conteúdo vem sendo cobrado"
+  commonTrapNotes    String?            @db.Text
+  interdisciplinaryNotes String?        @db.Text
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([area, subject, isCurrentPattern])
+  @@map("enem_historical_trends")
+}
