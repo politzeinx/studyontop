@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Camera,
   UploadCloud,
@@ -14,6 +16,8 @@ import {
   ArrowRight,
   Eye,
   Check,
+  LineChart,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -21,23 +25,49 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { CameraScanner, CapturedPage } from "@/components/scanner/camera-scanner";
 import { MockOCRProvider, DetectedAnswerItem } from "@/lib/ocr/ocr-provider";
+import { useAuth } from "@/context/auth-context";
+
+// Gabarito oficial de referência para as 10 primeiras questões do simulado ENEM
+const OFFICIAL_SAMPLE_KEYS: Record<number, { alt: "A" | "B" | "C" | "D" | "E"; subject: string; area: string; difficulty: string }> = {
+  1: { alt: "C", subject: "Matemática (Geometria Espacial)", area: "Matemática", difficulty: "Média" },
+  2: { alt: "A", subject: "Matemática (Funções e Álgebra)", area: "Matemática", difficulty: "Fácil" },
+  3: { alt: "B", subject: "Química (Química Orgânica)", area: "Ciências da Natureza", difficulty: "Média" },
+  4: { alt: "B", subject: "Física (Eletrodinâmica)", area: "Ciências da Natureza", difficulty: "Difícil" },
+  5: { alt: "E", subject: "Biologia (Ecologia)", area: "Ciências da Natureza", difficulty: "Fácil" },
+  6: { alt: "A", subject: "Linguagens (Interpretação Textual)", area: "Linguagens", difficulty: "Fácil" },
+  7: { alt: "D", subject: "História (Brasil República)", area: "Ciências Humanas", difficulty: "Média" },
+  8: { alt: "B", subject: "Geografia (Climatologia e Espaço)", area: "Ciências Humanas", difficulty: "Fácil" },
+  9: { alt: "D", subject: "Filosofia (Teoria Política)", area: "Ciências Humanas", difficulty: "Média" },
+  10: { alt: "E", subject: "Matemática (Estatística e Médias)", area: "Matemática", difficulty: "Fácil" },
+};
 
 export default function ScannerPage() {
+  const router = useRouter();
+  const { user, updateProfile } = useAuth();
+
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [uploadedPages, setUploadedPages] = useState<CapturedPage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingStepText, setProcessingStepText] = useState("");
   const [detectedResults, setDetectedResults] = useState<DetectedAnswerItem[] | null>(null);
-  const [comparisonMode, setComparisonMode] = useState<"enhanced" | "original">("enhanced");
+  const [isSavingCorrection, setIsSavingCorrection] = useState(false);
+  const [correctionDone, setCorrectionDone] = useState(false);
+  const [correctionSummary, setCorrectionSummary] = useState<{
+    totalQuestions: number;
+    correctCount: number;
+    wrongCount: number;
+    scorePct: number;
+    estimatedTri: number;
+  } | null>(null);
 
   const processingStages = [
-    "Detectando bordas do documento...",
-    "Corrigindo perspectiva e rotação 2D...",
+    "Detectando bordas da folha de respostas...",
+    "Corrigindo perspectiva 2D e alinhando colunas...",
     "Removendo sombras e nivelando iluminação...",
-    "Ajustando contraste e nitidez...",
-    "Executando OCR com visão computacional...",
-    "Identificando alternativas marcadas...",
+    "Ajustando contraste de bolhas preenchidas...",
+    "Executando leitura computacional de alternativas...",
+    "Calculando índice de confiança por questão...",
   ];
 
   // Simula upload de arquivo via input
@@ -60,7 +90,7 @@ export default function ScannerPage() {
     reader.readAsDataURL(file);
   };
 
-  // Inicia o pipeline de 12 etapas
+  // Inicia o pipeline de processamento do scanner
   const startProcessing = async () => {
     setIsProcessing(true);
     setProcessingProgress(10);
@@ -69,7 +99,7 @@ export default function ScannerPage() {
     for (let i = 0; i < processingStages.length; i++) {
       setProcessingStepText(processingStages[i]);
       setProcessingProgress(Math.round(((i + 1) / processingStages.length) * 100));
-      await new Promise((r) => setTimeout(r, 450));
+      await new Promise((r) => setTimeout(r, 400));
     }
 
     // Executa OCR
@@ -100,6 +130,67 @@ export default function ScannerPage() {
     );
   };
 
+  // Salva e prossegue para a correção real do simulado
+  const handleSaveAndCorrect = async () => {
+    if (!detectedResults || detectedResults.length === 0) return;
+    setIsSavingCorrection(true);
+
+    let correct = 0;
+    let wrong = 0;
+    const errorsToSave: any[] = [];
+
+    detectedResults.forEach((item) => {
+      const official = OFFICIAL_SAMPLE_KEYS[item.questionNumber];
+      if (official) {
+        if (item.detectedAlternative === official.alt) {
+          correct++;
+        } else {
+          wrong++;
+          errorsToSave.push({
+            id: `err-scanner-${item.questionNumber}-${Date.now()}`,
+            questionNumber: item.questionNumber,
+            userChoice: item.detectedAlternative || "Em Branco",
+            correctChoice: official.alt,
+            subject: official.subject,
+            area: official.area,
+            taxonomy: item.questionNumber % 2 === 0 ? "ERRO_CONCEITUAL" : "CALCULO",
+            probableCause: "Interpretação equivocada do enunciado ou falha no cálculo intermediário.",
+            whatToStudy: `Revisar os tópicos essenciais de ${official.subject}.`,
+          });
+        }
+      }
+    });
+
+    const total = detectedResults.length;
+    const scorePct = Math.round((correct / total) * 100);
+    const calculatedTri = Math.round(520 + (correct / total) * 310);
+
+    // Salva erros no localStorage do Banco de Erros
+    try {
+      const storedErrors = localStorage.getItem("studyontop_errors");
+      const currentList = storedErrors ? JSON.parse(storedErrors) : [];
+      const updatedErrors = [...errorsToSave, ...currentList];
+      localStorage.setItem("studyontop_errors", JSON.stringify(updatedErrors));
+    } catch (e) {}
+
+    // Atualiza a nota TRI do estudante
+    await updateProfile({
+      currentTriScore: calculatedTri,
+      streakDays: (user?.streakDays || 0) + 1,
+    });
+
+    setCorrectionSummary({
+      totalQuestions: total,
+      correctCount: correct,
+      wrongCount: wrong,
+      scorePct,
+      estimatedTri: calculatedTri,
+    });
+
+    setIsSavingCorrection(false);
+    setCorrectionDone(true);
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -126,8 +217,58 @@ export default function ScannerPage() {
         />
       )}
 
-      {/* Main View */}
-      {!detectedResults ? (
+      {/* Tela de Resultado da Correção Real */}
+      {correctionDone && correctionSummary ? (
+        <Card className="p-6 sm:p-8 space-y-6 border-indigo-500/40 glow-indigo animate-in fade-in-50">
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              Correção e Diagnóstico Concluídos!
+            </h2>
+            <p className="text-xs text-slate-300">
+              Sua prova foi corrigida com sucesso pelo motor TRI e as questões incorretas foram adicionadas ao seu Banco de Erros.
+            </p>
+          </div>
+
+          {/* Cards de Métricas da Prova Corrigida */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Nota TRI Estimada</span>
+              <span className="text-2xl font-black text-indigo-400">{correctionSummary.estimatedTri}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Acertos</span>
+              <span className="text-2xl font-black text-emerald-400">{correctionSummary.correctCount} / {correctionSummary.totalQuestions}</span>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Taxa de Acerto</span>
+              <span className="text-2xl font-black text-white">{correctionSummary.scorePct}%</span>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">Caderno de Erros</span>
+              <span className="text-2xl font-black text-rose-400">+{correctionSummary.wrongCount} itens</span>
+            </div>
+          </div>
+
+          {/* Ações pós-correção */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-800">
+            <Link href="/banco-erros" className="flex-1">
+              <Button variant="outline" size="lg" className="w-full text-xs gap-2 text-rose-300 border-rose-500/30">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Revisar Erros no Banco de Erros</span>
+              </Button>
+            </Link>
+            <Link href="/desempenho" className="flex-1">
+              <Button variant="primary" size="lg" className="w-full text-xs gap-2">
+                <LineChart className="w-4 h-4" />
+                <span>Ver Evolução no Desempenho TRI</span>
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      ) : !detectedResults ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left / Main Action Box */}
           <div className="lg:col-span-2 space-y-4">
@@ -243,7 +384,7 @@ export default function ScannerPage() {
                   Respostas Identificadas via OCR e Visão Computacional
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Confira as alternativas lidas. Questões com confiança abaixo de 80% requerem sua confirmação.
+                  Confira as alternativas lidas. Você pode tocar em qualquer letra para corrigir se necessário.
                 </p>
               </div>
 
@@ -316,10 +457,25 @@ export default function ScannerPage() {
               <span className="text-xs text-slate-400">
                 Nenhuma resposta é inventada quando a leitura não for confiável.
               </span>
-              <Button variant="primary" size="lg" className="gap-2 w-full sm:w-auto">
-                <Check className="w-4 h-4" />
-                <span>Salvar e Prosseguir para a Correção</span>
-                <ArrowRight className="w-4 h-4" />
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={handleSaveAndCorrect}
+                disabled={isSavingCorrection}
+                className="gap-2 w-full sm:w-auto cursor-pointer"
+              >
+                {isSavingCorrection ? (
+                  <>
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                    <span>Processando Correção TRI...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Salvar e Prosseguir para a Correção</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </Button>
             </div>
           </Card>
