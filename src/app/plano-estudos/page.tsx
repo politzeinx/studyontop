@@ -10,18 +10,14 @@ import {
   BookOpen,
   Layers,
   FileCheck2,
-  Sliders,
   Check,
-  Flame,
-  ArrowRight,
   Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { generateAdaptiveStudyPlan } from "@/services/study-plan/study-plan-generator";
-import { KnowledgeArea, PriorityLevel, GainPotential, DomainLevel } from "@/types";
 import { useAuth } from "@/context/auth-context";
 
 export default function PlanoEstudosPage() {
@@ -32,77 +28,8 @@ export default function PlanoEstudosPage() {
   const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set());
 
   const studyHoursPerDay = user?.studyHoursPerDay || 3.0;
-  const studyDaysPerWeek = user?.studyDaysPerWeek || 6;
+  const studyDaysPerWeek = user?.studyDaysPerWeek || 7;
   const targetCourse = user?.targetCourse || "Engenharia de Software";
-
-  // Gera o plano adaptativo conforme perfil real ou demo
-  const domainInputs = isDemo
-    ? [
-        {
-          subject: "Geometria Espacial",
-          subsubject: "Prismas e Cilindros",
-          area: KnowledgeArea.MATEMATICA,
-          domainScore: 35,
-          accuracyRate: 44,
-          totalQuestions: 18,
-          recentErrorsCount: 3,
-          recurrenceScoreEnemRecent: 0.9,
-        },
-        {
-          subject: "Termodinâmica",
-          subsubject: "Ciclo de Carnot",
-          area: KnowledgeArea.NATUREZA,
-          domainScore: 48,
-          accuracyRate: 50,
-          totalQuestions: 14,
-          recentErrorsCount: 2,
-          recurrenceScoreEnemRecent: 0.8,
-          isContinuousRevision: true,
-        },
-        {
-          subject: "Química Orgânica",
-          subsubject: "Reações e Isomeria",
-          area: KnowledgeArea.NATUREZA,
-          domainScore: 74,
-          accuracyRate: 83,
-          totalQuestions: 24,
-          recentErrorsCount: 1,
-          recurrenceScoreEnemRecent: 0.95,
-          isContinuousRevision: true,
-        },
-      ]
-    : [
-        {
-          subject: "Simulado Diagnóstico Inicial",
-          subsubject: "Nivelamento Geral ENEM",
-          area: KnowledgeArea.MATEMATICA,
-          domainScore: 0,
-          accuracyRate: 0,
-          totalQuestions: 0,
-          recentErrorsCount: 0,
-          recurrenceScoreEnemRecent: 1.0,
-        },
-        {
-          subject: "Matemática Básica & Funções",
-          subsubject: "Fundamentos para o ENEM",
-          area: KnowledgeArea.MATEMATICA,
-          domainScore: 0,
-          accuracyRate: 0,
-          totalQuestions: 0,
-          recentErrorsCount: 0,
-          recurrenceScoreEnemRecent: 0.95,
-        },
-        {
-          subject: "Ciências da Natureza",
-          subsubject: "Ecologia e Termologia",
-          area: KnowledgeArea.NATUREZA,
-          domainScore: 0,
-          accuracyRate: 0,
-          totalQuestions: 0,
-          recentErrorsCount: 0,
-          recurrenceScoreEnemRecent: 0.9,
-        },
-      ];
 
   const plan = generateAdaptiveStudyPlan(
     {
@@ -110,7 +37,8 @@ export default function PlanoEstudosPage() {
       studyDaysPerWeek,
       targetCourse,
     },
-    domainInputs
+    [],
+    isDemo
   );
 
   const currentSchedule = plan.dailySchedules[selectedDayIdx] || plan.dailySchedules[0];
@@ -130,6 +58,16 @@ export default function PlanoEstudosPage() {
   const dayProgressPct =
     totalDayBlocks > 0 ? Math.round((dayCompletedBlocks / totalDayBlocks) * 100) : 0;
 
+  const DAY_LABELS: Record<string, string> = {
+    SEGUNDA: "Segunda-feira",
+    TERCA: "Terça-feira",
+    QUARTA: "Quarta-feira",
+    QUINTA: "Quinta-feira",
+    SEXTA: "Sexta-feira",
+    SABADO: "Sábado",
+    DOMINGO: "Domingo",
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -142,14 +80,14 @@ export default function PlanoEstudosPage() {
           <p className="text-sm text-slate-400">
             {isDemo
               ? "Cronograma diário e semanal recalculado automaticamente com base nas suas lacunas e horas disponíveis"
-              : `Cronograma personalizado para ${user?.name || "você"} • Foco: ${targetCourse} (${studyHoursPerDay}h/dia)`}
+              : `Cronograma personalizado para ${user?.name || "você"} • Foco: ${targetCourse} (${studyHoursPerDay}h/dia • ${studyDaysPerWeek} dias/semana)`}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {isDemo && (
             <Badge variant="cyan" className="text-[10px]">
-              Modo Demo
+              Modo Demonstração
             </Badge>
           )}
           <Badge variant="default" className="text-xs font-mono">
@@ -162,7 +100,7 @@ export default function PlanoEstudosPage() {
         <div className="p-4 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs text-slate-300 flex items-center gap-3">
           <Info className="w-4 h-4 text-indigo-400 shrink-0" />
           <p>
-            Este é o seu roteiro inicial de nivelamento. Assim que você enviar um simulado ou gabarito, os blocos de estudo se reorganizarão priorizando automaticamente as matérias em que você teve maior dificuldade.
+            Este é o seu cronograma semanal de preparação. Conforme você resolver ou escanear simulados, os blocos de estudo priorizarão automaticamente os assuntos em que você tiver maior margem de ganho na TRI.
           </p>
         </div>
       )}
@@ -207,14 +145,14 @@ export default function PlanoEstudosPage() {
           <div>
             <div className="flex items-center gap-2">
               <Badge variant="default" className="text-xs font-bold">
-                {currentSchedule.dayOfWeek}
+                {DAY_LABELS[currentSchedule.dayOfWeek] || currentSchedule.dayOfWeek}
               </Badge>
               <span className="text-xs text-slate-400">
                 Meta do dia: <strong>{currentSchedule.totalPlannedHours}h</strong>
               </span>
             </div>
             <h2 className="text-lg font-bold text-white mt-1">
-              Roteiro de Estudos Personalizado
+              Roteiro de Estudos do Dia
             </h2>
           </div>
 
@@ -272,7 +210,13 @@ export default function PlanoEstudosPage() {
                           variant={block.type === "FLASHCARDS" ? "purple" : "default"}
                           className="text-[10px]"
                         >
-                          {block.type}
+                          {block.type === "FLASHCARDS"
+                            ? "Flashcards"
+                            : block.type === "TEORIA"
+                            ? "Teoria & Conteúdo"
+                            : block.type === "QUESTOES"
+                            ? "Questões Práticas"
+                            : "Simulado"}
                         </Badge>
                         <span className="text-xs text-indigo-400 font-bold">
                           • {block.durationMinutes} min

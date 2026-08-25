@@ -29,34 +29,84 @@ export interface GeneratedStudyPlanResult {
   };
 }
 
+const DEFAULT_WEEKLY_SYLLABUS = [
+  // Segunda
+  {
+    mainSubject: "Matemática (Álgebra, Funções e Proporcionalidade)",
+    mainArea: KnowledgeArea.MATEMATICA,
+    mainReason: "Assunto de altíssima incidência na régua TRI do ENEM.",
+    secSubject: "Redação (Estrutura Dissertativa-Argumentativa e Repertório)",
+    secArea: KnowledgeArea.LINGUAGENS,
+    secReason: "Treino semanal para atingir a meta dos 900+ pontos.",
+  },
+  // Terça
+  {
+    mainSubject: "Física (Cinemática, Dinâmica e Energia)",
+    mainArea: KnowledgeArea.NATUREZA,
+    mainReason: "Conceitos fundamentais de Mecânica no ENEM.",
+    secSubject: "Química (Estrutura Atômica, Ligações e Soluções)",
+    secArea: KnowledgeArea.NATUREZA,
+    secReason: "Base essencial para estequiometria e química geral.",
+  },
+  // Quarta
+  {
+    mainSubject: "Biologia (Ecologia, Ciclos Biogeoquímicos e Citologia)",
+    mainArea: KnowledgeArea.NATUREZA,
+    mainReason: "Tema mais recorrente de Ciências da Natureza em todas as edições.",
+    secSubject: "História (Brasil República e Cidadania)",
+    secArea: KnowledgeArea.HUMANAS,
+    secReason: "Matriz de Ciências Humanas com foco em processos sociais.",
+  },
+  // Quinta
+  {
+    mainSubject: "Matemática (Geometria Plana, Espacial e Trigonometria)",
+    mainArea: KnowledgeArea.MATEMATICA,
+    mainReason: "Cálculo de áreas, volumes e visão espacial.",
+    secSubject: "Geografia (Urbanização, Espaço Agrário e Climatologia)",
+    secArea: KnowledgeArea.HUMANAS,
+    secReason: "Interpretação de mapas, gráficos e dinâmica socioambiental.",
+  },
+  // Sexta
+  {
+    mainSubject: "Linguagens (Interpretação de Texto, Figuras e Gêneros)",
+    mainArea: KnowledgeArea.LINGUAGENS,
+    mainReason: "Competência leitora e estratégias de velocidade.",
+    secSubject: "Filosofia e Sociologia (Ética, Política e Teoria Social)",
+    secArea: KnowledgeArea.HUMANAS,
+    secReason: "Base teórica interdisciplinar para Humanas e Redação.",
+  },
+  // Sábado
+  {
+    mainSubject: "Simulado Semanal / Treino de Ritmo e TRI",
+    mainArea: KnowledgeArea.MATEMATICA,
+    mainReason: "Simulação de tempo de prova e calibração estatística.",
+    secSubject: "",
+    secArea: KnowledgeArea.MATEMATICA,
+    secReason: "",
+  },
+  // Domingo
+  {
+    mainSubject: "Treino Prático de Questões Contemporâneas (ENEM Recente)",
+    mainArea: KnowledgeArea.MATEMATICA,
+    mainReason: "Consolidação prática com questões dos padrões mais recentes.",
+    secSubject: "Revisão e Fechamento Semanal",
+    secArea: KnowledgeArea.NATUREZA,
+    secReason: "Fixação dos pontos revisados ao longo da semana.",
+  },
+];
+
 /**
  * Gera o cronograma diário e semanal adaptativo do aluno para 5, 6 ou 7 dias
  */
 export function generateAdaptiveStudyPlan(
   config: UserStudyConfig,
-  domainInputs: SubjectDomainInput[]
+  domainInputs: SubjectDomainInput[],
+  isDemoMode: boolean = false
 ): GeneratedStudyPlanResult {
   const { studyHoursPerDay = 3.0, studyDaysPerWeek = 6 } = config;
   const clampedDays = Math.min(Math.max(studyDaysPerWeek, 1), 7);
   const weeklyTargetHours = studyHoursPerDay * clampedDays;
   const dailyTargetMinutes = Math.round(studyHoursPerDay * 60);
-
-  // Calcula prioridades de todos os assuntos cadastrados
-  const prioritizedSubjects = domainInputs
-    .map((d) => calculatePriorityIndex(d))
-    .sort((a, b) => b.priorityIndex - a.priorityIndex);
-
-  const topSubject = prioritizedSubjects[0] || {
-    subject: "Geometria Espacial",
-    subsubject: "Prismas e Cilindros",
-    area: KnowledgeArea.MATEMATICA,
-    priorityIndex: 85,
-    priorityLevel: PriorityLevel.MUITO_ALTA,
-    gainPotential: GainPotential.MUITO_ALTO,
-    domainLevel: DomainLevel.PRIORIDADE,
-    recommendedAction: "Estude Geometria Espacial por 60 minutos",
-    rationale: "Assunto prioritário devido a baixo domínio e alta recorrência recente no ENEM.",
-  };
 
   const allDaysOfWeek: Array<DailySchedule["dayOfWeek"]> = [
     "SEGUNDA",
@@ -75,7 +125,6 @@ export function generateAdaptiveStudyPlan(
     const isStudyDay = idx < clampedDays;
 
     if (!isStudyDay) {
-      // Dia de descanso programado
       dailySchedules.push({
         dayOfWeek: dayName,
         date: "Descanso",
@@ -88,7 +137,7 @@ export function generateAdaptiveStudyPlan(
     const blocks: StudyBlock[] = [];
     let remainingMinutes = dailyTargetMinutes;
 
-    // 1. Bloco de Revisão Diária de Flashcards (SRS)
+    // 1. Bloco de Revisão de Flashcards SRS (20 min)
     blocks.push({
       id: `block-${dayName}-srs`,
       subject: "Revisão Diária de Flashcards (SRS)",
@@ -101,57 +150,47 @@ export function generateAdaptiveStudyPlan(
     });
     remainingMinutes -= 20;
 
-    // 2. Se for Sábado ou Domingo: Simulado ou Treino de Questões
-    if (dayName === "SABADO" || (dayName === "DOMINGO" && clampedDays === 7)) {
-      const isSimDay = dayName === "SABADO";
+    const daySyllabus = DEFAULT_WEEKLY_SYLLABUS[idx] || DEFAULT_WEEKLY_SYLLABUS[0];
+
+    // Sábado é Simulado Semanal
+    if (dayName === "SABADO") {
       blocks.push({
-        id: `block-${dayName}-${isSimDay ? "sim" : "quest"}`,
-        subject: isSimDay
-          ? "Simulado Adaptativo / Treino de Ritmo"
-          : "Treino Prático de Questões Recentes",
-        area: topSubject.area,
+        id: `block-${dayName}-sim`,
+        subject: daySyllabus.mainSubject,
+        area: daySyllabus.mainArea,
         durationMinutes: remainingMinutes,
-        type: isSimDay ? "SIMULADO" : "QUESTOES",
+        type: "SIMULADO",
         priority: PriorityLevel.MUITO_ALTA,
-        reason: isSimDay
-          ? "Treino de estratégia de tempo e calibração da TRI."
-          : "Fixação e consolidação de questões contemporâneas.",
+        reason: daySyllabus.mainReason,
         completed: false,
       });
-      remainingMinutes = 0;
     } else {
-      // 3. Bloco Principal de Teoria & Exercícios
-      const targetSub = prioritizedSubjects[idx % prioritizedSubjects.length] || topSubject;
-      const mainDuration = Math.min(60, remainingMinutes);
-
+      // Bloco Principal de Teoria
+      const mainDuration = Math.min(70, remainingMinutes);
       blocks.push({
         id: `block-${dayName}-main`,
-        subject: `${targetSub.subject}${targetSub.subsubject ? ` (${targetSub.subsubject})` : ""}`,
-        area: targetSub.area,
+        subject: daySyllabus.mainSubject,
+        area: daySyllabus.mainArea,
         durationMinutes: mainDuration,
         type: "TEORIA",
-        priority: targetSub.priorityLevel,
-        reason: `Potencial de ganho ${targetSub.gainPotential} no padrão do ENEM recente.`,
+        priority: PriorityLevel.ALTA,
+        reason: daySyllabus.mainReason,
         completed: false,
       });
       remainingMinutes -= mainDuration;
 
-      // 4. Bloco Secundário de Resolução de Questões Calibradas
-      if (remainingMinutes > 0) {
-        const secondarySub =
-          prioritizedSubjects[(idx + 1) % prioritizedSubjects.length] || topSubject;
-
+      // Bloco Secundário de Questões
+      if (remainingMinutes > 0 && daySyllabus.secSubject) {
         blocks.push({
           id: `block-${dayName}-sec`,
-          subject: `${secondarySub.subject} (Questões Calibradas)`,
-          area: secondarySub.area,
+          subject: daySyllabus.secSubject,
+          area: daySyllabus.secArea,
           durationMinutes: remainingMinutes,
           type: "QUESTOES",
-          priority: secondarySub.priorityLevel,
-          reason: "Fixação e resolução prática no estilo contemporâneo do ENEM.",
+          priority: PriorityLevel.ALTA,
+          reason: daySyllabus.secReason,
           completed: false,
         });
-        remainingMinutes = 0;
       }
     }
 
@@ -163,13 +202,29 @@ export function generateAdaptiveStudyPlan(
     });
   }
 
-  const focusSubjects = prioritizedSubjects.slice(0, 4).map((sub) => ({
-    subject: sub.subject,
-    area: sub.area,
-    priority: sub.priorityLevel,
-    gainPotential: sub.gainPotential,
-    allocatedMinutes: 180,
-  }));
+  const focusSubjects = [
+    {
+      subject: "Matemática e Funções",
+      area: KnowledgeArea.MATEMATICA,
+      priority: PriorityLevel.MUITO_ALTA,
+      gainPotential: GainPotential.MUITO_ALTO,
+      allocatedMinutes: 180,
+    },
+    {
+      subject: "Ecologia e Natureza",
+      area: KnowledgeArea.NATUREZA,
+      priority: PriorityLevel.ALTA,
+      gainPotential: GainPotential.ALTO,
+      allocatedMinutes: 140,
+    },
+    {
+      subject: "Estrutura de Redação",
+      area: KnowledgeArea.LINGUAGENS,
+      priority: PriorityLevel.ALTA,
+      gainPotential: GainPotential.MUITO_ALTO,
+      allocatedMinutes: 120,
+    },
+  ];
 
   return {
     weeklyTargetHours,
@@ -177,11 +232,11 @@ export function generateAdaptiveStudyPlan(
     dailySchedules,
     focusSubjects,
     activeStudyRecommendation: {
-      title: topSubject.recommendedAction,
-      details: topSubject.rationale,
+      title: "Inicie pelo Módulo de Matemática e Redação",
+      details: "Disciplinas fundamentais com maior impacto na sua média geral do ENEM.",
       durationMinutes: 60,
-      subject: topSubject.subject,
-      area: topSubject.area,
+      subject: "Matemática & Redação",
+      area: KnowledgeArea.MATEMATICA,
     },
   };
 }
