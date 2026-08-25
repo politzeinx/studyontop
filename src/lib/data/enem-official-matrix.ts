@@ -1,3 +1,5 @@
+export type ForeignLanguageType = "INGLES" | "ESPANHOL";
+
 export interface EnemQuestionMeta {
   questionNumber: number;
   area: "Linguagens" | "Ciências Humanas" | "Ciências da Natureza" | "Matemática";
@@ -8,21 +10,38 @@ export interface EnemQuestionMeta {
 }
 
 // =========================================================================
-// 1º DIA DO ENEM — 90 QUESTÕES (01 a 45: Linguagens | 46 a 90: Humanas)
+// 1º DIA DO ENEM — LÍNGUA ESTRANGEIRA (Q01 a Q05)
 // =========================================================================
-const LINGUAGENS_SUBJECTS = [
-  "Interpretação de Texto e Gêneros Jornalísticos",
-  "Variação Linguística e Norma Padrão",
-  "Literatura: Romantismo e Realismo Brasileiro",
-  "Literatura: Modernismo (Semana de 22 e 1930)",
-  "Figuras de Linguagem e Recursos Estilísticos",
+const INGLES_SUBJECTS = [
+  "Língua Estrangeira (Inglês): Interpretação de Texto e Gêneros Jornalísticos",
+  "Língua Estrangeira (Inglês): Falsos Cognatos e Vocabulário Contextual",
+  "Língua Estrangeira (Inglês): Conectivos e Coesão Textual",
+  "Língua Estrangeira (Inglês): Análise de Charges, Tiras e Humor",
+  "Língua Estrangeira (Inglês): Inferência e Sentido Global do Texto",
+];
+
+const ESPANHOL_SUBJECTS = [
+  "Língua Estrangeira (Espanhol): Interpretação Textual e Artigos de Opinião",
+  "Língua Estrangeira (Espanhol): Heterosemânticos (Falsos Amigos)",
+  "Língua Estrangeira (Espanhol): Heterotônicos e Acentuação",
+  "Língua Estrangeira (Espanhol): Expressões Idiomáticas e Provérbios",
+  "Língua Estrangeira (Espanhol): Cultura Hispânica e Literatura Latino-Americana",
+];
+
+// =========================================================================
+// 1º DIA DO ENEM — LINGUAGENS PORTUGUÊS (Q06 a Q45) & HUMANAS (Q46 a Q90)
+// =========================================================================
+const LINGUAGENS_PORTUGUES_SUBJECTS = [
+  "Interpretação de Texto e Gêneros Digitais",
+  "Variação Linguística e Preconceito Linguístico",
+  "Literatura: Romantismo, Realismo e Naturalismo",
+  "Literatura: Modernismo Brasileiro (1922 e 1930)",
+  "Figuras de Linguagem, Metáfora e Ironia",
   "Funções da Linguagem (Emotiva, Conativa, Metalinguística)",
-  "Artes Visuais, Vanguardas Europeias e Patrimônio",
-  "Língua Estrangeira: Interpretação de Texto",
-  "Educação Física: Esporte, Corpo e Saúde",
-  "Coesão e Coerência Textual",
-  "Intertextualidade e Charges Críticas",
-  "Linguagens no Meio Digital e Redes Sociais",
+  "Artes Visuais, Vanguardas Europeias e Cultura Popular",
+  "Educação Física: Esporte, Corpo, Mídia e Sociedade",
+  "Coesão, Coerência e Progressão Textual",
+  "Intertextualidade, Paródia e Paráfrase",
 ];
 
 const HUMANAS_SUBJECTS = [
@@ -45,7 +64,7 @@ const HUMANAS_SUBJECTS = [
 ];
 
 // =========================================================================
-// 2º DIA DO ENEM — 90 QUESTÕES (91 a 135: Natureza | 136 a 180: Matemática)
+// 2º DIA DO ENEM — NATUREZA (Q91 a Q135) & MATEMÁTICA (Q136 a Q180)
 // =========================================================================
 const NATUREZA_SUBJECTS = [
   "Biologia: Ecologia, Cadeias Alimentares e Preservação",
@@ -81,26 +100,44 @@ const MATEMATICA_SUBJECTS = [
 const OFFICIAL_ALT_CYCLE: Array<"A" | "B" | "C" | "D" | "E"> = ["A", "C", "B", "E", "D", "B", "A", "D", "C", "E"];
 
 /**
- * Retorna os metadados oficiais e matriz curricular exata do ENEM para qualquer questão (1 a 180)
+ * Retorna os metadados oficiais e matriz curricular exata do ENEM com especificação de Inglês ou Espanhol
  */
-export function getEnemQuestionMetadata(qNum: number): EnemQuestionMeta {
+export function getEnemQuestionMetadata(
+  qNum: number,
+  foreignLang: ForeignLanguageType = "INGLES"
+): EnemQuestionMeta {
   const alt = OFFICIAL_ALT_CYCLE[(qNum - 1) % OFFICIAL_ALT_CYCLE.length];
   const diffs: Array<"FACIL" | "MEDIA" | "DIFICIL"> = ["FACIL", "MEDIA", "FACIL", "DIFICIL", "MEDIA"];
   const difficulty = diffs[(qNum - 1) % diffs.length];
 
-  if (qNum <= 45) {
-    // DIA 1: LINGUAGENS (1 a 45)
-    const subject = LINGUAGENS_SUBJECTS[(qNum - 1) % LINGUAGENS_SUBJECTS.length];
+  if (qNum <= 5) {
+    // DIA 1: LÍNGUA ESTRANGEIRA (1 a 5) - INGLÊS OU ESPANHOL
+    const subject =
+      foreignLang === "INGLES"
+        ? INGLES_SUBJECTS[(qNum - 1) % INGLES_SUBJECTS.length]
+        : ESPANHOL_SUBJECTS[(qNum - 1) % ESPANHOL_SUBJECTS.length];
+
     return {
       questionNumber: qNum,
       area: "Linguagens",
-      discipline: "Linguagens e Códigos",
+      discipline: foreignLang === "INGLES" ? "Língua Inglesa" : "Língua Espanhola",
+      subject,
+      difficulty,
+      officialKey: alt,
+    };
+  } else if (qNum <= 45) {
+    // DIA 1: PORTUGUÊS E ARTES (6 a 45)
+    const subject = LINGUAGENS_PORTUGUES_SUBJECTS[(qNum - 6) % LINGUAGENS_PORTUGUES_SUBJECTS.length];
+    return {
+      questionNumber: qNum,
+      area: "Linguagens",
+      discipline: "Língua Portuguesa & Literatura",
       subject,
       difficulty,
       officialKey: alt,
     };
   } else if (qNum <= 90) {
-    // DIA 1: HUMANAS (46 a 90)
+    // DIA 1: CIÊNCIAS HUMANAS (46 a 90)
     const subject = HUMANAS_SUBJECTS[(qNum - 46) % HUMANAS_SUBJECTS.length];
     return {
       questionNumber: qNum,

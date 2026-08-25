@@ -23,13 +23,14 @@ import {
   Sliders,
   Calendar,
   Layers,
+  Languages,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
 import { useAuth } from "@/context/auth-context";
-import { getEnemQuestionMetadata, EnemQuestionMeta } from "@/lib/data/enem-official-matrix";
+import { getEnemQuestionMetadata, EnemQuestionMeta, ForeignLanguageType } from "@/lib/data/enem-official-matrix";
 
 type EnemDayType = "DIA_1" | "DIA_2" | "CUSTOM";
 type WizardStep = "STUDENT_ANSWERS" | "OFFICIAL_KEY" | "RESULT";
@@ -37,8 +38,9 @@ type WizardStep = "STUDENT_ANSWERS" | "OFFICIAL_KEY" | "RESULT";
 export default function EnviarSimuladoPage() {
   const { user, updateProfile } = useAuth();
 
-  // Seleção do Dia do ENEM
+  // Seleção do Dia do ENEM e Língua Estrangeira
   const [selectedDay, setSelectedDay] = useState<EnemDayType>("DIA_1");
+  const [foreignLang, setForeignLang] = useState<ForeignLanguageType>("INGLES");
   const [startQuestion, setStartQuestion] = useState<number>(1);
   const [endQuestion, setEndQuestion] = useState<number>(15);
   const [currentStep, setCurrentStep] = useState<WizardStep>("STUDENT_ANSWERS");
@@ -67,6 +69,7 @@ export default function EnviarSimuladoPage() {
     estimatedTri: number;
     dayTitle: string;
     rangeLabel: string;
+    foreignLangLabel: string;
     wrongItems: Array<{
       questionNumber: number;
       userAlt: string;
@@ -253,7 +256,7 @@ export default function EnviarSimuladoPage() {
       officialAnswers.forEach((o) => officialMap.set(o.questionNumber, o.alternative));
     } else {
       studentAnswers.forEach((s) => {
-        const meta = getEnemQuestionMetadata(s.questionNumber);
+        const meta = getEnemQuestionMetadata(s.questionNumber, foreignLang);
         officialMap.set(s.questionNumber, meta.officialKey);
       });
     }
@@ -270,7 +273,7 @@ export default function EnviarSimuladoPage() {
     }> = [];
 
     studentAnswers.forEach((sItem) => {
-      const meta = getEnemQuestionMetadata(sItem.questionNumber);
+      const meta = getEnemQuestionMetadata(sItem.questionNumber, foreignLang);
       const officialAlt = officialMap.get(sItem.questionNumber) || meta.officialKey;
 
       if (sItem.alternative === officialAlt) {
@@ -292,7 +295,7 @@ export default function EnviarSimuladoPage() {
     const scorePct = Math.round((correct / total) * 100);
     const calculatedTri = Math.round(520 + (correct / total) * 310);
 
-    // Salva no Banco de Erros
+    // Salva no Banco de Erros com a disciplina correta
     const errorsToSave = wrongList.map((item) => ({
       id: `err-gabarito-${item.questionNumber}-${Date.now()}`,
       questionCode: `ENEM — Questão ${item.questionNumber.toString().padStart(2, "0")}`,
@@ -347,12 +350,15 @@ export default function EnviarSimuladoPage() {
       estimatedTri: calculatedTri,
       dayTitle,
       rangeLabel,
+      foreignLangLabel: foreignLang === "INGLES" ? "Inglês" : "Espanhol",
       wrongItems: wrongList,
     });
 
     setIsProcessingCorrection(false);
     setCurrentStep("RESULT");
   };
+
+  const includesForeignLang = startQuestion <= 5;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -363,7 +369,7 @@ export default function EnviarSimuladoPage() {
           Envio de Gabarito & Correção
         </h1>
         <p className="text-sm text-slate-400">
-          Escolha o Dia do ENEM que deseja corrigir, a quantidade de questões e envie suas respostas para diagnóstico TRI.
+          Escolha o Dia do ENEM, sua opção de língua estrangeira (Inglês ou Espanhol) e a quantidade exata de questões para correção.
         </p>
       </div>
 
@@ -434,7 +440,7 @@ export default function EnviarSimuladoPage() {
       </div>
 
       {/* =========================================================================
-          ETAPA 1: ESCOLHA DO DIA DO ENEM E RESPOSTAS MARCADAS
+          ETAPA 1: ESCOLHA DO DIA DO ENEM, LÍNGUA ESTRANGEIRA E RESPOSTAS
           ========================================================================= */}
       {currentStep === "STUDENT_ANSWERS" && (
         <Card className="p-6 space-y-6">
@@ -514,11 +520,55 @@ export default function EnviarSimuladoPage() {
             </div>
           </div>
 
-          {/* 2. PRESETS E SELETOR DE INTERVALO BASEADO NO DIA ESCOLHIDO */}
+          {/* 2. SELETOR DE LÍNGUA ESTRANGEIRA (INGLÊS OU ESPANHOL) SE A PROVA INCLUIR QUESTÕES 1 A 5 */}
+          {includesForeignLang && (
+            <div className="space-y-2 pt-3 border-t border-slate-800">
+              <label className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                <Languages className="w-4 h-4 text-indigo-400" />
+                <span>Opção de Língua Estrangeira (Questões 01 a 05):</span>
+              </label>
+
+              <div className="grid grid-cols-2 gap-3 max-w-md">
+                <button
+                  type="button"
+                  onClick={() => setForeignLang("INGLES")}
+                  className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
+                    foreignLang === "INGLES"
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🇬🇧</span>
+                    <span className="font-bold text-xs">Inglês (Q01-Q05)</span>
+                  </div>
+                  {foreignLang === "INGLES" && <Check className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setForeignLang("ESPANHOL")}
+                  className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
+                    foreignLang === "ESPANHOL"
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🇪🇸</span>
+                    <span className="font-bold text-xs">Espanhol (Q01-Q05)</span>
+                  </div>
+                  {foreignLang === "ESPANHOL" && <Check className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 3. PRESETS E SELETOR DE INTERVALO */}
           <div className="space-y-3 pt-3 border-t border-slate-800">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-300 block">
-                2. Quantas questões do {selectedDay === "DIA_1" ? "1º Dia" : selectedDay === "DIA_2" ? "2º Dia" : "Simulado"} você quer corrigir?
+                Quantas questões você quer corrigir?
               </label>
               <Badge variant="cyan" className="text-xs font-bold">
                 {totalQuestionsCount} Questões (Q{startQuestion.toString().padStart(2, "0")} até Q{endQuestion.toString().padStart(2, "0")})
@@ -528,6 +578,17 @@ export default function EnviarSimuladoPage() {
             {/* Presets para 1º Dia */}
             {selectedDay === "DIA_1" && (
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset(1, 5)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    startQuestion === 1 && endQuestion === 5
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {foreignLang === "INGLES" ? "🇬🇧 5 Qs Inglês (01-05)" : "🇪🇸 5 Qs Espanhol (01-05)"}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleApplyPreset(1, 10)}
@@ -598,7 +659,7 @@ export default function EnviarSimuladoPage() {
                       : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
                   }`}
                 >
-                  10 Questões de Natureza (91 a 100)
+                  10 Qs Natureza (91 a 100)
                 </button>
                 <button
                   type="button"
@@ -609,7 +670,7 @@ export default function EnviarSimuladoPage() {
                       : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
                   }`}
                 >
-                  10 Questões de Matemática (136 a 145)
+                  10 Qs Matemática (136 a 145)
                 </button>
                 <button
                   type="button"
@@ -715,7 +776,7 @@ export default function EnviarSimuladoPage() {
           {!studentAnswers ? (
             <div className="space-y-4 pt-2 border-t border-slate-800">
               <label className="text-xs font-bold text-slate-300 block">
-                3. Como deseja inserir suas {totalQuestionsCount} respostas?
+                Como deseja inserir suas {totalQuestionsCount} respostas?
               </label>
 
               {/* Botões de Ação Imediata */}
@@ -807,13 +868,18 @@ export default function EnviarSimuladoPage() {
             <div className="space-y-6 animate-in fade-in-50">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="success" className="text-xs font-bold">
                       {studentAnswers.length} Questões (Q{startQuestion.toString().padStart(2, "0")} a Q{endQuestion.toString().padStart(2, "0")})
                     </Badge>
-                    <span className="text-xs text-slate-400">
-                      Caderno: {selectedDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}
-                    </span>
+                    <Badge variant="secondary" className="text-xs">
+                      {selectedDay === "DIA_1" ? "1º Dia" : "2º Dia"}
+                    </Badge>
+                    {includesForeignLang && (
+                      <Badge variant="outline" className="text-xs text-indigo-300 border-indigo-500/30">
+                        {foreignLang === "INGLES" ? "🇬🇧 Inglês (01-05)" : "🇪🇸 Espanhol (01-05)"}
+                      </Badge>
+                    )}
                   </div>
                   <h3 className="text-lg font-bold text-white mt-1">
                     Confira ou ajuste suas alternativas
@@ -834,21 +900,31 @@ export default function EnviarSimuladoPage() {
                 </Button>
               </div>
 
-              {/* Grid das Questões com Rolagem Suave */}
+              {/* Grid das Questões */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2.5 max-h-[440px] overflow-y-auto custom-scrollbar pr-2">
                 {studentAnswers.map((item) => {
-                  const meta = getEnemQuestionMetadata(item.questionNumber);
+                  const meta = getEnemQuestionMetadata(item.questionNumber, foreignLang);
+                  const isForeignQuestion = item.questionNumber <= 5;
+
                   return (
                     <div
                       key={item.questionNumber}
-                      className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col items-center justify-center space-y-1.5 hover:border-indigo-500/40 transition-colors"
+                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center space-y-1.5 transition-colors ${
+                        isForeignQuestion
+                          ? "bg-indigo-950/30 border-indigo-500/40"
+                          : "bg-slate-900/90 border-slate-800 hover:border-slate-700"
+                      }`}
                     >
                       <div className="flex items-center justify-between w-full px-1">
-                        <span className="text-[11px] font-bold text-slate-300">
+                        <span className="text-[11px] font-bold text-slate-200">
                           Q{item.questionNumber.toString().padStart(2, "0")}
                         </span>
-                        <span className="text-[9px] text-slate-400 font-semibold truncate max-w-[55px]">
-                          {meta.area.replace("Ciências ", "").slice(0, 5)}
+                        <span className="text-[9px] text-indigo-300 font-semibold truncate max-w-[65px]">
+                          {isForeignQuestion
+                            ? foreignLang === "INGLES"
+                              ? "🇬🇧 Inglês"
+                              : "🇪🇸 Espanhol"
+                            : meta.area.replace("Ciências ", "").slice(0, 6)}
                         </span>
                       </div>
 
@@ -897,9 +973,16 @@ export default function EnviarSimuladoPage() {
         <Card className="p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
             <div>
-              <Badge variant="default" className="text-xs font-bold">
-                Etapa 2: Gabarito Oficial de Correção
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="text-xs font-bold">
+                  Etapa 2: Gabarito Oficial de Correção
+                </Badge>
+                {includesForeignLang && (
+                  <Badge variant="outline" className="text-xs text-indigo-300 border-indigo-500/30">
+                    Língua Estrangeira: {foreignLang === "INGLES" ? "🇬🇧 Inglês" : "🇪🇸 Espanhol"}
+                  </Badge>
+                )}
+              </div>
               <h3 className="text-lg font-bold text-white mt-1">
                 Como deseja comparar suas {studentAnswers?.length} respostas?
               </h3>
@@ -938,7 +1021,7 @@ export default function EnviarSimuladoPage() {
               </div>
               <span className="font-bold text-xs text-white block">Gabarito Oficial ENEM</span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                Régua padrão oficial do INEP para o {selectedDay === "DIA_1" ? "1º Dia" : "2º Dia"}.
+                Régua padrão do INEP (com {foreignLang === "INGLES" ? "Inglês" : "Espanhol"}).
               </span>
             </button>
 
@@ -1034,7 +1117,8 @@ export default function EnviarSimuladoPage() {
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
             <span className="text-slate-300">
               Pronto para corrigir as <strong>{studentAnswers?.length} questões</strong> do{" "}
-              <strong>{selectedDay === "DIA_1" ? "1º Dia (Linguagens & Humanas)" : "2º Dia (Natureza & Matemática)"}</strong>.
+              <strong>{selectedDay === "DIA_1" ? "1º Dia" : "2º Dia"}</strong>
+              {includesForeignLang && <span> com opção de Língua Estrangeira: <strong>{foreignLang === "INGLES" ? "Inglês" : "Espanhol"}</strong></span>}.
             </span>
           </div>
 
@@ -1080,7 +1164,7 @@ export default function EnviarSimuladoPage() {
               Correção de {correctionSummary.totalQuestions} Questões Concluída!
             </h2>
             <p className="text-xs text-slate-300">
-              {correctionSummary.dayTitle} — {correctionSummary.rangeLabel}. As questões incorretas foram catalogadas no Banco de Erros.
+              {correctionSummary.dayTitle} ({correctionSummary.rangeLabel}) — Língua Estrangeira: {correctionSummary.foreignLangLabel}. As falhas foram catalogadas no Banco de Erros.
             </p>
           </div>
 
