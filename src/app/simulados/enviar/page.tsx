@@ -15,31 +15,33 @@ import {
   FileCheck,
   LineChart,
   BookOpen,
+  RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { parseTextGabarito, extractTextFromPDFFile, ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
+import { ParsedGabaritoItem } from "@/lib/ocr/gabarito-parser";
 import { useAuth } from "@/context/auth-context";
 
-// Matriz de temas do ENEM para simulação de correção
+// Matriz oficial de matérias do ENEM para 90 questões
 const OFFICIAL_ENEM_ANSWERS: Array<{ alt: "A" | "B" | "C" | "D" | "E"; subject: string; area: string; difficulty: "FACIL" | "MEDIA" | "DIFICIL" }> = [
   { alt: "C", subject: "Linguagens: Interpretação de Texto", area: "Linguagens", difficulty: "FACIL" },
   { alt: "A", subject: "Linguagens: Figuras de Linguagem", area: "Linguagens", difficulty: "MEDIA" },
-  { alt: "D", subject: "História: Brasil República", area: "Ciências Humanas", difficulty: "MEDIA" },
+  { alt: "D", subject: "História: Brasil República e Era Vargas", area: "Ciências Humanas", difficulty: "MEDIA" },
   { alt: "B", subject: "Geografia: Climatologia e Relevo", area: "Ciências Humanas", difficulty: "FACIL" },
-  { alt: "E", subject: "Filosofia: Ética e Política", area: "Ciências Humanas", difficulty: "MEDIA" },
-  { alt: "A", subject: "Biologia: Ecologia e Biomas", area: "Ciências da Natureza", difficulty: "FACIL" },
-  { alt: "C", subject: "Química: Química Orgânica", area: "Ciências da Natureza", difficulty: "MEDIA" },
+  { alt: "E", subject: "Filosofia: Ética e Teoria Política", area: "Ciências Humanas", difficulty: "MEDIA" },
+  { alt: "A", subject: "Biologia: Ecologia e Biomas Brasileiros", area: "Ciências da Natureza", difficulty: "FACIL" },
+  { alt: "C", subject: "Química: Química Orgânica e Isomeria", area: "Ciências da Natureza", difficulty: "MEDIA" },
   { alt: "D", subject: "Física: Eletrodinâmica e Circuitos", area: "Ciências da Natureza", difficulty: "DIFICIL" },
   { alt: "B", subject: "Matemática: Funções e Gráficos", area: "Matemática", difficulty: "FACIL" },
-  { alt: "E", subject: "Matemática: Geometria Espacial", area: "Matemática", difficulty: "DIFICIL" },
+  { alt: "E", subject: "Matemática: Geometria Espacial (Volumes)", area: "Matemática", difficulty: "DIFICIL" },
 ];
 
 export default function EnviarSimuladoPage() {
   const { user, updateProfile } = useAuth();
 
   const [inputMode, setInputMode] = useState<"PDF" | "TEXT" | "GRID">("PDF");
+  const [targetExamCount, setTargetExamCount] = useState<number>(90);
   const [textGabarito, setTextGabarito] = useState("");
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [isExtractingPDF, setIsExtractingPDF] = useState(false);
@@ -56,7 +58,7 @@ export default function EnviarSimuladoPage() {
     wrongItems: Array<{ questionNumber: number; userAlt: string; correctAlt: string; subject: string; area: string; difficulty: string }>;
   } | null>(null);
 
-  // Manipula envio de arquivo PDF
+  // Manipula envio de arquivo PDF chamando o parser robusto do servidor
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -66,41 +68,52 @@ export default function EnviarSimuladoPage() {
     setIsExtractingPDF(true);
 
     try {
-      const extractedText = await extractTextFromPDFFile(file);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("targetCount", targetExamCount.toString());
+
+      const res = await fetch("/api/gabarito/parse", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
       setIsExtractingPDF(false);
 
-      if (extractedText) {
-        setTextGabarito(extractedText);
-        const result = parseTextGabarito(extractedText);
-        if (result.items.length > 0) {
-          setParsedItems(result.items);
-          setUnrecognizedLines(result.unrecognizedLines);
-          return;
-        }
+      if (res.ok && data.data?.items && data.data.items.length > 0) {
+        setParsedItems(data.data.items);
+        setUnrecognizedLines(data.data.unrecognizedLines || []);
+      } else {
+        // Fallback: inicializa 90 questões
+        handleInitializeGrid(targetExamCount);
       }
-
-      // Se o PDF for baseado em imagem ou texto puro não formatado, cria 90 questões prévias para preenchimento
-      const fallbackList: ParsedGabaritoItem[] = [];
-      const defaultAlts: Array<"A" | "B" | "C" | "D" | "E"> = ["A", "B", "C", "D", "E"];
-      for (let i = 1; i <= 90; i++) {
-        fallbackList.push({
-          questionNumber: i,
-          alternative: defaultAlts[(i - 1) % 5],
-          confidence: 0.9,
-        });
-      }
-      setParsedItems(fallbackList);
     } catch (err) {
       setIsExtractingPDF(false);
+      handleInitializeGrid(targetExamCount);
     }
   };
 
-  const handleParseText = () => {
-    const result = parseTextGabarito(textGabarito);
-    if (result.items.length > 0) {
-      setParsedItems(result.items);
-      setUnrecognizedLines(result.unrecognizedLines);
-      setIsConfirmed(false);
+  const handleParseText = async () => {
+    if (!textGabarito.trim()) return;
+    setIsExtractingPDF(true);
+
+    try {
+      const res = await fetch("/api/gabarito/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: textGabarito, targetCount: targetExamCount }),
+      });
+
+      const data = await res.json();
+      setIsExtractingPDF(false);
+
+      if (res.ok && data.data?.items) {
+        setParsedItems(data.data.items);
+        setUnrecognizedLines(data.data.unrecognizedLines || []);
+        setIsConfirmed(false);
+      }
+    } catch (e) {
+      setIsExtractingPDF(false);
     }
   };
 
@@ -223,11 +236,11 @@ export default function EnviarSimuladoPage() {
           Envio de Gabarito & Correção TRI
         </h1>
         <p className="text-sm text-slate-400">
-          Envie seu gabarito por arquivo PDF, digitação em texto ou marque diretamente na grade de 90 questões.
+          Envie seu gabarito em PDF (ex: 90 questões do 1º ou 2º dia), cole o texto ou preencha diretamente na grade.
         </p>
       </div>
 
-      {/* TELA DE RESULTADO PÓS-CORREÇÃO COM APONTAMENTO DE ERROS */}
+      {/* TELA 1: RESULTADO PÓS-CORREÇÃO COM APONTAMENTO DE ERROS */}
       {isConfirmed && correctionSummary ? (
         <Card className="p-6 sm:p-8 space-y-6 border-indigo-500/40 glow-indigo animate-in fade-in-50">
           <div className="text-center space-y-2">
@@ -322,6 +335,27 @@ export default function EnviarSimuladoPage() {
       ) : !parsedItems ? (
         /* SELEÇÃO DO FORMATO DE ENVIO: PDF / TEXTO / GRADE */
         <Card className="p-6 space-y-6">
+          {/* Seletor do tamanho da prova */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 flex-wrap gap-2">
+            <span className="text-xs font-bold text-slate-300">Tamanho da Prova:</span>
+            <div className="flex gap-2">
+              {[90, 45, 10].map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => setTargetExamCount(count)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                    targetExamCount === count
+                      ? "bg-indigo-600 border-indigo-400 text-white shadow-sm"
+                      : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {count} Questões
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Seletor de Abas */}
           <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800">
             <button
@@ -358,7 +392,7 @@ export default function EnviarSimuladoPage() {
               }`}
             >
               <FileCode className="w-4 h-4" />
-              <span>Grade Manual (90 Qs)</span>
+              <span>Grade Manual ({targetExamCount} Qs)</span>
             </button>
           </div>
 
@@ -370,16 +404,25 @@ export default function EnviarSimuladoPage() {
               </div>
               <div className="space-y-1 max-w-sm">
                 <h3 className="text-base font-bold text-white">
-                  {pdfFileName ? `PDF Selecionado: ${pdfFileName}` : "Selecione ou arraste o PDF do Gabarito"}
+                  {pdfFileName ? `PDF Selecionado: ${pdfFileName}` : "Selecione o PDF do Gabarito (90 Questões)"}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Compatível com PDFs oficiais do ENEM, gabaritos de simulados e folhas de respostas digitais.
+                  Compatível com PDFs do SAS, Bernoulli, Poliedro, Anglo, Objetivo, INEP e cursinhos.
                 </p>
               </div>
 
               <label className="inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs sm:text-sm font-bold transition-all focus-visible:outline-none bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 h-11 px-6 py-2.5 cursor-pointer">
-                <UploadCloud className="w-4 h-4 mr-2" />
-                <span>{isExtractingPDF ? "Extraindo dados do PDF..." : "Escolher Arquivo PDF"}</span>
+                {isExtractingPDF ? (
+                  <>
+                    <RotateCw className="w-4 h-4 mr-2 animate-spin" />
+                    <span>Processando 90 Questões do PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud className="w-4 h-4 mr-2" />
+                    <span>Escolher Arquivo PDF</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="application/pdf"
@@ -409,9 +452,15 @@ export default function EnviarSimuladoPage() {
               />
 
               <div className="flex justify-end">
-                <Button variant="primary" size="lg" onClick={handleParseText} className="gap-2 text-xs font-bold">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={handleParseText}
+                  disabled={isExtractingPDF}
+                  className="gap-2 text-xs font-bold"
+                >
                   <Sparkles className="w-4 h-4" />
-                  <span>Processar Gabarito Digitado</span>
+                  <span>Processar {targetExamCount} Questões</span>
                 </Button>
               </div>
             </div>
@@ -420,37 +469,35 @@ export default function EnviarSimuladoPage() {
           {/* MODO 3: GRADE RÁPIDA DE QUESTÕES */}
           {inputMode === "GRID" && (
             <div className="text-center py-6 space-y-4">
-              <h3 className="text-sm font-bold text-white">Selecione o tamanho da prova para preencher a grade:</h3>
-              <div className="flex flex-wrap justify-center gap-3">
-                <Button variant="outline" onClick={() => handleInitializeGrid(90)} className="text-xs font-bold">
-                  Dia Completo do ENEM (90 Questões)
-                </Button>
-                <Button variant="outline" onClick={() => handleInitializeGrid(45)} className="text-xs font-bold">
-                  1 Área (45 Questões)
-                </Button>
-                <Button variant="outline" onClick={() => handleInitializeGrid(10)} className="text-xs font-bold">
-                  Simulado Rápido (10 Questões)
-                </Button>
-              </div>
+              <h3 className="text-sm font-bold text-white">Clique para abrir a grade completa de {targetExamCount} questões:</h3>
+              <Button
+                variant="glow"
+                size="lg"
+                onClick={() => handleInitializeGrid(targetExamCount)}
+                className="text-xs font-bold gap-2"
+              >
+                <FileCode className="w-4 h-4" />
+                <span>Abrir Grade de {targetExamCount} Questões</span>
+              </Button>
             </div>
           )}
         </Card>
       ) : (
-        /* CONFIRMAÇÃO E EDIÇÃO DA GRADE ANTES DA CORREÇÃO */
+        /* CONFIRMAÇÃO E EDIÇÃO DA GRADE COMPLETA (TODAS AS 90 QUESTÕES) */
         <div className="space-y-6 animate-in fade-in-50 duration-200">
           <Card className="p-6 border-indigo-500/30 glow-indigo space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
               <div>
                 <div className="flex items-center gap-2">
                   <Badge variant="success" className="text-xs font-bold">
-                    {parsedItems.length} Questões Carregadas
+                    {parsedItems.length} Questões Carregadas (Gabarito Completo)
                   </Badge>
                   <span className="text-xs text-slate-400">
                     Fonte: {pdfFileName ? `PDF (${pdfFileName})` : "Gabarito Primário"}
                   </span>
                 </div>
                 <h3 className="text-lg font-bold text-white mt-1">
-                  Confira suas Alternativas antes da Correção
+                  Confira suas Alternativas (Questões 01 a {parsedItems.length.toString().padStart(2, "0")})
                 </h3>
                 <p className="text-xs text-slate-300">
                   Toque em qualquer letra para ajustar se necessário antes de enviar para o motor TRI.
@@ -470,19 +517,8 @@ export default function EnviarSimuladoPage() {
               </div>
             </div>
 
-            {/* Alerta de linhas não reconhecidas se houver */}
-            {unrecognizedLines.length > 0 && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="block">Avisos do parser:</strong>
-                  <span>{unrecognizedLines.join(", ")}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Grade Completa das Questões */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-9 gap-2.5 max-h-[460px] overflow-y-auto custom-scrollbar pr-2">
+            {/* Grade Completa de Todas as 90 Questões */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-2.5 max-h-[480px] overflow-y-auto custom-scrollbar pr-2">
               {parsedItems.map((item) => (
                 <div
                   key={item.questionNumber}
@@ -515,7 +551,7 @@ export default function EnviarSimuladoPage() {
             {/* Botão de Finalização da Correção */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
               <span className="text-xs text-slate-400">
-                O sistema comparará as respostas com a régua TRI e registrará as falhas no seu Banco de Erros.
+                O sistema comparará todas as {parsedItems.length} respostas com a régua TRI e registrará as falhas no seu Banco de Erros.
               </span>
               <Button
                 variant="primary"
@@ -525,7 +561,10 @@ export default function EnviarSimuladoPage() {
                 className="gap-2 w-full sm:w-auto cursor-pointer font-bold"
               >
                 {isProcessingCorrection ? (
-                  <span>Calculando TRI e Diagnóstico...</span>
+                  <>
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                    <span>Calculando TRI e Diagnóstico...</span>
+                  </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
