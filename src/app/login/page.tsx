@@ -8,25 +8,32 @@ import {
   Lock,
   ArrowRight,
   Sparkles,
-  ShieldCheck,
-  Zap,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/auth-context";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { login, loginAsDemo } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !password) {
+      setErrorMessage("Por favor, preencha o e-mail e a senha.");
+      return;
+    }
     setIsLoading(true);
-    await login(email, password);
+    setErrorMessage("");
+
+    const res = await login(email, password);
+    if (!res.success) {
+      setErrorMessage(res.error || "E-mail ou senha incorretos.");
+    }
     setIsLoading(false);
   };
 
@@ -48,6 +55,13 @@ export default function LoginPage() {
 
         {/* Login Form Card */}
         <Card className="p-6 sm:p-8 space-y-5 border-slate-800 bg-slate-900/90 shadow-2xl">
+          {errorMessage && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5 animate-in fade-in-50">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 block">
@@ -60,7 +74,10 @@ export default function LoginPage() {
                   required
                   placeholder="seu.email@exemplo.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setErrorMessage("");
+                  }}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
                 />
               </div>
@@ -82,7 +99,10 @@ export default function LoginPage() {
                   required
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setErrorMessage("");
+                  }}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
                 />
               </div>

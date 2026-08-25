@@ -102,9 +102,9 @@ export const DEMO_USER: UserProfile = {
 interface AuthContextType {
   user: UserProfile | null;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<void>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   loginAsDemo: () => void;
-  register: (profile: Partial<UserProfile>) => Promise<void>;
+  register: (profile: Partial<UserProfile> & { password?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
 }
@@ -131,45 +131,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string) => {
+  const login = async (email: string, password?: string) => {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setUser(data.user);
-          localStorage.setItem("studyontop_user", JSON.stringify(data.user));
-          router.push("/dashboard");
-          return;
-        }
-      }
-    } catch (err) {
-      // Fallback local se estiver offline
-    }
+      const data = await res.json();
 
-    // Fallback local
-    const fallbackProfile: UserProfile = {
-      id: `user-${Date.now()}`,
-      name: email.split("@")[0],
-      email: email.trim().toLowerCase(),
-      targetCourse: "Engenharia de Software",
-      targetCollege: "Federal",
-      quotaType: "AMPLA",
-      targetScore: estimateSisuCutoffScore("Engenharia de Software", "AMPLA"),
-      studyHoursPerDay: 3.0,
-      studyDaysPerWeek: 7,
-      isDemo: false,
-      streakDays: 1,
-      currentTriScore: 500.0,
-    };
-    setUser(fallbackProfile);
-    localStorage.setItem("studyontop_user", JSON.stringify(fallbackProfile));
-    router.push("/dashboard");
+      if (!res.ok) {
+        return { success: false, error: data.error || "Erro ao realizar login." };
+      }
+
+      if (data.user) {
+        setUser(data.user);
+        localStorage.setItem("studyontop_user", JSON.stringify(data.user));
+        router.push("/dashboard");
+        return { success: true };
+      }
+      return { success: false, error: "Resposta inválida do servidor." };
+    } catch (err: any) {
+      return { success: false, error: "Erro de conexão com o servidor." };
+    }
   };
 
   const loginAsDemo = () => {
@@ -178,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/dashboard");
   };
 
-  const register = async (profileData: Partial<UserProfile>) => {
+  const register = async (profileData: Partial<UserProfile> & { password?: string }) => {
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
@@ -186,41 +171,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(profileData),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setUser(data.user);
-          localStorage.setItem("studyontop_user", JSON.stringify(data.user));
-          router.push("/dashboard");
-          return;
-        }
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { success: false, error: data.error || "Erro ao realizar cadastro." };
       }
-    } catch (err) {
-      // Fallback offline
+
+      if (data.user) {
+        setUser(data.user);
+        localStorage.setItem("studyontop_user", JSON.stringify(data.user));
+        router.push("/dashboard");
+        return { success: true };
+      }
+      return { success: false, error: "Resposta inválida do servidor." };
+    } catch (err: any) {
+      return { success: false, error: "Erro de conexão ao cadastrar." };
     }
-
-    const course = profileData.targetCourse || "Engenharia de Software";
-    const quota: QuotaType = profileData.quotaType || "AMPLA";
-    const calculatedScore = profileData.targetScore || estimateSisuCutoffScore(course, quota);
-
-    const newProfile: UserProfile = {
-      id: `user-${Date.now()}`,
-      name: profileData.name || "Novo Estudante",
-      email: profileData.email || "aluno@studyontop.com",
-      targetCourse: course,
-      targetCollege: profileData.targetCollege || "Federal",
-      quotaType: quota,
-      targetScore: calculatedScore,
-      studyHoursPerDay: profileData.studyHoursPerDay || 3.0,
-      studyDaysPerWeek: profileData.studyDaysPerWeek || 7,
-      isDemo: false,
-      streakDays: 1,
-      currentTriScore: 500.0,
-    };
-
-    setUser(newProfile);
-    localStorage.setItem("studyontop_user", JSON.stringify(newProfile));
-    router.push("/dashboard");
   };
 
   const logout = () => {

@@ -34,6 +34,7 @@ export default function CadastroPage() {
   const [targetScore, setTargetScore] = useState<number>(765);
   const [studyHoursPerDay, setStudyHoursPerDay] = useState(3);
   const [studyDaysPerWeek, setStudyDaysPerWeek] = useState(7);
+  const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const { register } = useAuth();
@@ -46,11 +47,22 @@ export default function CadastroPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
+    if (!name || !email || !password) {
+      setErrorMessage("Por favor, preencha todos os campos obrigatórios.");
+      return;
+    }
+    if (password.length < 3) {
+      setErrorMessage("A senha deve ter no mínimo 3 caracteres.");
+      return;
+    }
+
     setIsLoading(true);
-    await register({
+    setErrorMessage("");
+
+    const res = await register({
       name,
       email,
+      password,
       targetCourse,
       targetCollege,
       quotaType,
@@ -58,6 +70,10 @@ export default function CadastroPage() {
       studyHoursPerDay,
       studyDaysPerWeek,
     });
+
+    if (!res.success) {
+      setErrorMessage(res.error || "Erro ao realizar cadastro.");
+    }
     setIsLoading(false);
   };
 
@@ -79,6 +95,11 @@ export default function CadastroPage() {
 
         {/* Form Card */}
         <Card className="p-6 sm:p-8 space-y-5 border-slate-800 bg-slate-900/90 shadow-2xl">
+          {errorMessage && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5 animate-in fade-in-50">
+              <span>{errorMessage}</span>
+            </div>
+          )}
           <form onSubmit={handleRegister} className="space-y-4">
             {/* Nome */}
             <div className="space-y-1.5">

@@ -1,38 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, saveUser } from "@/lib/server-storage";
-import { UserProfile, estimateSisuCutoffScore } from "@/context/auth-context";
+import { findUserByEmail } from "@/lib/server-storage";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email } = body;
+    const { email, password } = body;
 
-    if (!email) {
-      return NextResponse.json({ error: "E-mail obrigatório" }, { status: 400 });
+    if (!email || !email.trim()) {
+      return NextResponse.json({ error: "Por favor, informe seu e-mail." }, { status: 400 });
     }
 
-    let user = findUserByEmail(email);
-
-    // Se a conta não existir no servidor, cria uma conta inicial limpa com dados coerentes
-    if (!user) {
-      user = {
-        id: `user-${Date.now()}`,
-        name: email.split("@")[0],
-        email: email.trim().toLowerCase(),
-        targetCourse: "Engenharia de Software",
-        targetCollege: "Federal",
-        quotaType: "AMPLA",
-        targetScore: estimateSisuCutoffScore("Engenharia de Software", "AMPLA"),
-        studyHoursPerDay: 3,
-        studyDaysPerWeek: 7,
-        isDemo: false,
-        streakDays: 1,
-        currentTriScore: 500.0,
-      };
-      saveUser(user);
+    if (!password || !password.trim()) {
+      return NextResponse.json({ error: "Por favor, informe sua senha." }, { status: 400 });
     }
 
-    return NextResponse.json({ user });
+    const storedUser = findUserByEmail(email);
+
+    if (!storedUser) {
+      return NextResponse.json(
+        { error: "Nenhuma conta encontrada com este e-mail. Clique em 'Criar Conta Real' para se cadastrar." },
+        { status: 401 }
+      );
+    }
+
+    // Se o usuário tem senha cadastrada, valida a correspondência exata
+    if (storedUser.password && storedUser.password !== password.trim()) {
+      return NextResponse.json(
+        { error: "Senha incorreta. Verifique a senha digitada e tente novamente." },
+        { status: 401 }
+      );
+    }
+
+    // Retorna os dados exatos sem o campo de senha
+    const { password: _, ...userSafe } = storedUser;
+
+    return NextResponse.json({ user: userSafe });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Erro no login" }, { status: 500 });
   }

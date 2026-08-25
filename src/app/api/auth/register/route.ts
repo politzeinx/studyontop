@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveUser, findUserByEmail } from "@/lib/server-storage";
-import { UserProfile, estimateSisuCutoffScore, QuotaType } from "@/context/auth-context";
+import { saveUser, findUserByEmail, StoredUser } from "@/lib/server-storage";
+import { estimateSisuCutoffScore, QuotaType } from "@/context/auth-context";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
     const {
       name,
       email,
+      password,
       targetCourse = "Engenharia de Software",
       targetCollege = "USP",
       quotaType = "AMPLA",
@@ -16,20 +17,26 @@ export async function POST(req: NextRequest) {
       studyDaysPerWeek = 7,
     } = body;
 
-    if (!email) {
-      return NextResponse.json({ error: "E-mail obrigatório" }, { status: 400 });
+    if (!email || !email.trim()) {
+      return NextResponse.json({ error: "O e-mail é obrigatório." }, { status: 400 });
     }
 
-    const calculatedScore = targetScore || estimateSisuCutoffScore(targetCourse, quotaType as QuotaType);
+    if (!password || password.trim().length < 3) {
+      return NextResponse.json({ error: "A senha deve ter pelo menos 3 caracteres." }, { status: 400 });
+    }
 
-    const newUser: UserProfile = {
+    const calculatedScore =
+      targetScore || estimateSisuCutoffScore(targetCourse, quotaType as QuotaType);
+
+    const newUser: StoredUser = {
       id: `user-${Date.now()}`,
-      name: name || email.split("@")[0],
+      name: name?.trim() || email.split("@")[0],
       email: email.trim().toLowerCase(),
-      targetCourse,
-      targetCollege,
+      password: password.trim(),
+      targetCourse: targetCourse.trim(),
+      targetCollege: targetCollege.trim(),
       quotaType: quotaType as QuotaType,
-      targetScore: calculatedScore,
+      targetScore: Number(calculatedScore),
       studyHoursPerDay: Number(studyHoursPerDay),
       studyDaysPerWeek: Number(studyDaysPerWeek),
       isDemo: false,
@@ -39,7 +46,10 @@ export async function POST(req: NextRequest) {
 
     saveUser(newUser);
 
-    return NextResponse.json({ user: newUser });
+    // Retorna os dados sem expor o campo de senha
+    const { password: _, ...userSafe } = newUser;
+
+    return NextResponse.json({ user: userSafe });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Erro no cadastro" }, { status: 500 });
   }
