@@ -85,22 +85,6 @@ const DEMO_ERRORS: ErrorItem[] = [
     isResolved: false,
     date: "20/08/2026",
   },
-  {
-    id: "err-4",
-    questionCode: "ENEM 2023 — Q064 (História)",
-    discipline: "História",
-    subject: "História do Brasil",
-    subsubject: "Estado Novo e Cidadania Regulada",
-    difficulty: "MEDIA",
-    studentAnswer: "E",
-    correctAnswer: "B",
-    taxonomy: "INTERPRETACAO",
-    probableCause: "Interpretação da legislação trabalhista dissociada do controle corporativista de sindicatos.",
-    whatToStudy: "Estrutura sindical corporativista da Era Vargas e conceito de Cidadania Regulada.",
-    reviewCount: 4,
-    isResolved: true,
-    date: "14/08/2026",
-  },
 ];
 
 export default function BancoErrosPage() {
@@ -110,18 +94,33 @@ export default function BancoErrosPage() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "RESOLVED">("PENDING");
   const [errors, setErrors] = useState<ErrorItem[]>([]);
 
-  useEffect(() => {
+  const loadErrors = () => {
     if (user?.isDemo) {
       setErrors(DEMO_ERRORS);
-    } else if (user) {
-      // Carrega erros reais da conta do usuário
-      const stored = localStorage.getItem(`studyontop_errors_${user.id}`);
-      if (stored) {
-        setErrors(JSON.parse(stored));
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const email = user?.email || "default";
+      const storedByEmail = localStorage.getItem(`studyontop_errors_${email}`);
+      const storedGeneral = localStorage.getItem("studyontop_errors");
+      
+      const raw = storedByEmail || storedGeneral;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setErrors(Array.isArray(parsed) ? parsed : []);
+        } catch (e) {
+          setErrors([]);
+        }
       } else {
         setErrors([]);
       }
     }
+  };
+
+  useEffect(() => {
+    loadErrors();
   }, [user]);
 
   const toggleResolved = (id: string) => {
@@ -130,7 +129,9 @@ export default function BancoErrosPage() {
     );
     setErrors(updated);
     if (user && !user.isDemo) {
-      localStorage.setItem(`studyontop_errors_${user.id}`, JSON.stringify(updated));
+      const email = user?.email || "default";
+      localStorage.setItem(`studyontop_errors_${email}`, JSON.stringify(updated));
+      localStorage.setItem("studyontop_errors", JSON.stringify(updated));
     }
   };
 
@@ -150,9 +151,9 @@ export default function BancoErrosPage() {
     if (statusFilter === "RESOLVED" && !item.isResolved) return false;
     if (
       searchQuery &&
-      !item.subject.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !item.subsubject.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !item.questionCode.toLowerCase().includes(searchQuery.toLowerCase())
+      !item.subject?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !item.subsubject?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !item.questionCode?.toLowerCase().includes(searchQuery.toLowerCase())
     ) {
       return false;
     }
@@ -176,7 +177,7 @@ export default function BancoErrosPage() {
             </p>
           </div>
           <Badge variant="default" className="text-xs">
-            Conta Real: {user?.name}
+            Conta: {user?.name || "Estudante"}
           </Badge>
         </div>
 
@@ -189,21 +190,21 @@ export default function BancoErrosPage() {
           <div className="space-y-2 max-w-md mx-auto">
             <h2 className="text-xl font-bold text-white">Nenhum erro registrado ainda!</h2>
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Sua conta real está pronta e limpa. Conforme você realizar simulados ou escanear gabaritos, as questões que você errar serão classificadas aqui automaticamente com o motivo provável e o plano de revisão.
+              Conforme você escanear ou responder simulados, as questões erradas aparecerão aqui automaticamente com diagnóstico de taxonomia e plano de revisão.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Link href="/simulados/novo">
+            <Link href="/scanner">
               <Button variant="glow" size="lg" className="w-full sm:w-auto text-xs sm:text-sm gap-2">
-                <FileCheck2 className="w-4 h-4" />
-                <span>Fazer Primeiro Simulado</span>
+                <ScanLine className="w-4 h-4" />
+                <span>Escanear Folha de Prova</span>
               </Button>
             </Link>
-            <Link href="/scanner">
+            <Link href="/simulados">
               <Button variant="outline" size="lg" className="w-full sm:w-auto text-xs sm:text-sm gap-2">
-                <ScanLine className="w-4 h-4 text-indigo-400" />
-                <span>Escanear Folha de Prova</span>
+                <FileCheck2 className="w-4 h-4 text-indigo-400" />
+                <span>Ver Simulados Disponíveis</span>
               </Button>
             </Link>
           </div>
@@ -328,7 +329,7 @@ export default function BancoErrosPage() {
                     <span className="text-sm font-bold text-white">{item.questionCode}</span>
                     <Badge className={taxConfig.color}>{taxConfig.label}</Badge>
                     <Badge variant="secondary" className="text-[10px]">
-                      {item.difficulty}
+                      {item.difficulty || "MÉDIA"}
                     </Badge>
                   </div>
 
@@ -366,7 +367,7 @@ export default function BancoErrosPage() {
                   <div className="flex items-center gap-3 text-xs text-slate-400">
                     <span>Assunto: <strong className="text-white">{item.subject}</strong></span>
                     <span>•</span>
-                    <span>Revisado: <strong>{item.reviewCount}x</strong></span>
+                    <span>Revisado: <strong>{item.reviewCount || 0}x</strong></span>
                   </div>
 
                   <div className="flex items-center gap-2">
