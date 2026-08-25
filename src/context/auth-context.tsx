@@ -122,7 +122,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (stored) {
         setUser(JSON.parse(stored));
       } else {
-        // Novo visitante começa sem sessão ativa para ser direcionado ao login
         setUser(null);
       }
     } catch (e) {
@@ -133,31 +132,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string) => {
-    const existing = localStorage.getItem(`studyontop_user_${email}`);
-    if (existing) {
-      const profile = JSON.parse(existing);
-      setUser(profile);
-      localStorage.setItem("studyontop_user", JSON.stringify(profile));
-    } else {
-      const quota: QuotaType = "AMPLA";
-      const newProfile: UserProfile = {
-        id: `user-${Date.now()}`,
-        name: email.split("@")[0],
-        email,
-        targetCourse: "Engenharia de Software",
-        targetCollege: "USP",
-        quotaType: quota,
-        targetScore: estimateSisuCutoffScore("Engenharia de Software", quota),
-        studyHoursPerDay: 3.0,
-        studyDaysPerWeek: 7,
-        isDemo: false,
-        streakDays: 1,
-        currentTriScore: 500.0,
-      };
-      setUser(newProfile);
-      localStorage.setItem("studyontop_user", JSON.stringify(newProfile));
-      localStorage.setItem(`studyontop_user_${email}`, JSON.stringify(newProfile));
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem("studyontop_user", JSON.stringify(data.user));
+          router.push("/dashboard");
+          return;
+        }
+      }
+    } catch (err) {
+      // Fallback local se estiver offline
     }
+
+    // Fallback local
+    const fallbackProfile: UserProfile = {
+      id: `user-${Date.now()}`,
+      name: email.split("@")[0],
+      email: email.trim().toLowerCase(),
+      targetCourse: "Engenharia de Software",
+      targetCollege: "Federal",
+      quotaType: "AMPLA",
+      targetScore: estimateSisuCutoffScore("Engenharia de Software", "AMPLA"),
+      studyHoursPerDay: 3.0,
+      studyDaysPerWeek: 7,
+      isDemo: false,
+      streakDays: 1,
+      currentTriScore: 500.0,
+    };
+    setUser(fallbackProfile);
+    localStorage.setItem("studyontop_user", JSON.stringify(fallbackProfile));
     router.push("/dashboard");
   };
 
@@ -168,6 +179,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (profileData: Partial<UserProfile>) => {
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profileData),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem("studyontop_user", JSON.stringify(data.user));
+          router.push("/dashboard");
+          return;
+        }
+      }
+    } catch (err) {
+      // Fallback offline
+    }
+
     const course = profileData.targetCourse || "Engenharia de Software";
     const quota: QuotaType = profileData.quotaType || "AMPLA";
     const calculatedScore = profileData.targetScore || estimateSisuCutoffScore(course, quota);
@@ -177,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: profileData.name || "Novo Estudante",
       email: profileData.email || "aluno@studyontop.com",
       targetCourse: course,
-      targetCollege: profileData.targetCollege || "USP",
+      targetCollege: profileData.targetCollege || "Federal",
       quotaType: quota,
       targetScore: calculatedScore,
       studyHoursPerDay: profileData.studyHoursPerDay || 3.0,
@@ -189,9 +220,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUser(newProfile);
     localStorage.setItem("studyontop_user", JSON.stringify(newProfile));
-    if (newProfile.email) {
-      localStorage.setItem(`studyontop_user_${newProfile.email}`, JSON.stringify(newProfile));
-    }
     router.push("/dashboard");
   };
 
@@ -206,6 +234,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const updated = { ...user, ...updates };
     setUser(updated);
     localStorage.setItem("studyontop_user", JSON.stringify(updated));
+
+    // Salva também no servidor
+    fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    }).catch(() => {});
   };
 
   return (
